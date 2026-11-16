@@ -1,5 +1,5 @@
 import { outputName } from "@/lib/utils";
-import type { ConvertOptions, ConverterModule, OutputFile } from "./types";
+import type { ConverterModule, OutputFile } from "./types";
 
 type Canvas = OffscreenCanvas | HTMLCanvasElement;
 type AvifEncoder = typeof import("./avif-encoder");

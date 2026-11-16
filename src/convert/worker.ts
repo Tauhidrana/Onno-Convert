@@ -27,8 +27,8 @@ ctx.onmessage = async (event: MessageEvent<Job>) => {
     return;
   }
   try {
-    const module = await tool.load();
-    const filesOut = await module.convert(files, { ...opts, __action: tool.action }, (progress) => {
+    const converter = await tool.load();
+    const filesOut = await converter.convert(files, { ...opts, __action: tool.action }, (progress) => {
       ctx.postMessage({ jobId, type: "progress", progress } satisfies Reply);
     });
     ctx.postMessage({ jobId, type: "done", files: filesOut } satisfies Reply);

@@ -43,6 +43,7 @@ export function ToolClient({ toolId }: { toolId: string }) {
   const [opts, setOpts] = useState<ConvertOptions>(() => defaults(fields));
   const [items, setItems] = useState<Item[]>([]);
   const [running, setRunning] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const [results, setResults] = useState<OutputFile[]>([]);
   const [dragging, setDragging] = useState(false);
   const [message, setMessage] = useState("");
@@ -94,6 +95,7 @@ export function ToolClient({ toolId }: { toolId: string }) {
   async function convert() {
     if (!items.length || running) return;
     setRunning(true);
+    setCancelling(false);
     cancelledRef.current = false;
     setResults([]);
     setMessage("");
@@ -139,11 +141,13 @@ export function ToolClient({ toolId }: { toolId: string }) {
     } finally {
       handleRef.current = null;
       setRunning(false);
+      setCancelling(false);
     }
   }
 
   function cancel() {
     cancelledRef.current = true;
+    setCancelling(true);
     handleRef.current?.cancel();
     setMessage("Cancellation requested.");
     setItems((prev) =>
@@ -396,10 +400,10 @@ export function ToolClient({ toolId }: { toolId: string }) {
             {running && (
               <button
                 onClick={cancel}
-                disabled={cancelledRef.current}
+                disabled={cancelling}
                 className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-black/10 px-4 py-2.5 text-sm font-medium transition hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/10"
               >
-                <Trash2 className="h-4 w-4" /> {cancelledRef.current ? "Stopping…" : "Cancel"}
+                <Trash2 className="h-4 w-4" /> {cancelling ? "Stopping…" : "Cancel"}
               </button>
             )}
           </div>

@@ -1,6 +1,6 @@
 import { outputName } from "@/lib/utils";
 import type { AutomaticSpeechRecognitionPipeline } from "@huggingface/transformers";
-import type { ConvertOptions, ConverterModule } from "./types";
+import type { ConverterModule } from "./types";
 
 const MODEL = "onnx-community/whisper-base";
 let transcriberPromise: Promise<AutomaticSpeechRecognitionPipeline> | null = null;

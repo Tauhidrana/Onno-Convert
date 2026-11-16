@@ -1,5 +1,5 @@
 import { extOf, outputName } from "@/lib/utils";
-import type { ConvertOptions, ConverterModule } from "./types";
+import type { ConverterModule } from "./types";
 
 type FFmpegModule = typeof import("@ffmpeg/ffmpeg");
 type FFmpegInstance = InstanceType<FFmpegModule["FFmpeg"]>;

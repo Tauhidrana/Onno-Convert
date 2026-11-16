@@ -21,9 +21,9 @@ export function runTool(
 
   if (!tool.worker) {
     let cancelled = false;
-    let module: ConverterModule | null = null;
+    let converter: ConverterModule | null = null;
     const promise = tool.load().then(async (loaded) => {
-      module = loaded;
+      converter = loaded;
       if (cancelled) throw new Error("Cancelled.");
       return loaded.convert(files, { ...opts, __action: tool.action }, (p) => {
         if (!cancelled) onProgress(p);
@@ -33,7 +33,7 @@ export function runTool(
       promise,
       cancel: () => {
         cancelled = true;
-        void module?.cancel?.();
+        void converter?.cancel?.();
       },
     };
   }
@@ -66,7 +66,7 @@ export function runTool(
 export async function runPrint(toolId: string, files: File[], opts: ConvertOptions) {
   const tool = toolById.get(toolId);
   if (!tool?.load) throw new Error("Unknown tool.");
-  const module = await tool.load();
-  if (!module.print) throw new Error("This tool has no print flow.");
-  await module.print(files, opts);
+  const converter = await tool.load();
+  if (!converter.print) throw new Error("This tool has no print flow.");
+  await converter.print(files, opts);
 }
