@@ -51,7 +51,7 @@ Quality:
 ## Phase 4 — ship & polish
 - [x] Apply supplied logo variants in the header; replace favicon and add Apple/PWA icons plus Open Graph metadata/image
 - [x] Remove generated public assets from Git; add linting and README; verify clean install/build
-- [ ] Hide planned Phase 3 tools from discovery and sitemap; show "Not available yet" on direct routes
+- [x] Hide planned Phase 3 tools from discovery and sitemap; show "Not available yet" on direct routes
 - [ ] Add Bangla/English/Auto and tiny/base/small Whisper choices; verify Bengali script output honestly
 - [ ] Exercise the >200 MiB warning and 390px layouts; rerun Lighthouse and project checks
 
@@ -60,6 +60,7 @@ Quality:
 
 Phase 4 branding milestone: `bun run build` and `bun run typecheck` pass. Header variants were visually checked in both themes; favicon, Apple/PWA icons, manifest, and Open Graph assets are wired to the supplied logos.
 Phase 4 hygiene milestone: clean `rm -rf node_modules .next && bun install && bun run build` passed; `bun run lint` and `bun run typecheck` pass. The build regenerates ignored FFmpeg/PDF/worker/Tesseract assets from installed dependencies.
+Phase 4 route milestone: build, lint, and typecheck pass. Browser check showed 49 tools on home, all eight planned tools absent from search and sitemap, and a direct planned route with "Not available yet" and no file input. E2E now covers all eight direct routes and planned-tool discovery; full rerun is pending.
 
 | Tool | Status |
 |---|---|
@@ -112,14 +113,14 @@ Phase 4 hygiene milestone: clean `rm -rf node_modules .next && bun install && bu
 | `compress-video` | works |
 | `epub-to-pdf` | works |
 | `epub-to-text` | works |
-| `pdf-to-docx` | missing (intentional Phase 3 server tool; UI verified) |
-| `pdf-to-xlsx` | missing (intentional Phase 3 server tool; UI verified) |
-| `pdf-to-pptx` | missing (intentional Phase 3 server tool; UI verified) |
-| `docx-to-pdf` | missing (intentional Phase 3 server tool; UI verified) |
-| `pptx-to-pdf` | missing (intentional Phase 3 server tool; UI verified) |
-| `djvu-to-pdf` | missing (intentional Phase 3 server tool; UI verified) |
-| `mobi-to-epub` | missing (intentional Phase 3 server tool; UI verified) |
-| `dwg-to-pdf` | missing (intentional Phase 3 server tool; UI verified) |
+| `pdf-to-docx` | planned (Phase 3; unavailable) |
+| `pdf-to-xlsx` | planned (Phase 3; unavailable) |
+| `pdf-to-pptx` | planned (Phase 3; unavailable) |
+| `docx-to-pdf` | planned (Phase 3; unavailable) |
+| `pptx-to-pdf` | planned (Phase 3; unavailable) |
+| `djvu-to-pdf` | planned (Phase 3; unavailable) |
+| `mobi-to-epub` | planned (Phase 3; unavailable) |
+| `dwg-to-pdf` | planned (Phase 3; unavailable) |
 
 Phase 2 is complete. Phase 3 server tools remain unbuilt pending approval.
 
@@ -137,11 +138,12 @@ Phase 2 is complete. Phase 3 server tools remain unbuilt pending approval.
 - Voice recording uses `MediaRecorder` and requires a secure origin plus microphone permission. MP3/WAV output was tested with Chromium's fake microphone, not physical devices or Safari; FFmpeg re-encodes locally.
 
 ## Next step
-Continue Phase 4 with planned-route handling; do not build Phase 3 server tools.
+Continue Phase 4 with Whisper language/model choices and real Bengali-script verification; do not build Phase 3 server tools.
 
 ## Handoff notes
 - Phase 4 branding is committed as `8b57866`. Supplied SVGs are in `public/`; generated `apple-touch-icon.png`, `pwa-192.png`, `pwa-512.png`, and `opengraph-image.png` are static assets. Header contrast was visually checked in light and dark themes.
-- Repo hygiene is implemented but not committed yet. The tracked FFmpeg/PDF copies are staged for removal; `scripts/copy-assets.ts` regenerates them. Clean install/build, lint, and typecheck pass.
+- Repo hygiene is committed as `f5012ee`. The tracked FFmpeg/PDF copies are removed from Git; `scripts/copy-assets.ts` regenerates them. Clean install/build, lint, and typecheck pass.
+- Planned-route changes are implemented but not committed yet. Manual browser checks found 49 available tools, hid all eight planned tools from home/search/sitemap, and showed the clean unavailable state on a direct URL; the full E2E rerun is pending.
 - The previous Lighthouse result (13.6.0, 100 on mobile and desktop) predates Phase 4 and must be rerun before final reporting.
 - `bun run test` passes: production build plus 64 Chromium checks; standalone `bun run typecheck` passed.
 - Lighthouse 13.6.0 reports 100 mobile and desktop for performance, accessibility, best practices, and SEO.

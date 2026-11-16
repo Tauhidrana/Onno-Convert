@@ -50,8 +50,8 @@ export interface Tool {
   combine?: boolean;
   /** Run in the generic Web Worker. Default false = main thread. */
   worker?: boolean;
-  /** Phase 3, not built. */
-  server?: boolean;
+  /** Phase 3 tool not built yet. */
+  status?: "planned";
   /** Print-based flow, no downloadable blob. */
   print?: boolean;
   options?: Field[];
@@ -685,14 +685,14 @@ export const tools: Tool[] = [
   },
 
   // Phase 3 (server, not built)
-  { id: "pdf-to-docx", from: "pdf", to: "docx", action: "server", category: "document", label: "PDF to Word", hint: "Server · Phase 3", icon: "server", color: "slate", accept: ".pdf,application/pdf", server: true },
-  { id: "pdf-to-xlsx", from: "pdf", to: "xlsx", action: "server", category: "document", label: "PDF to Excel", hint: "Server · Phase 3", icon: "server", color: "slate", accept: ".pdf,application/pdf", server: true },
-  { id: "pdf-to-pptx", from: "pdf", to: "pptx", action: "server", category: "document", label: "PDF to PowerPoint", hint: "Server · Phase 3", icon: "presentation", color: "slate", accept: ".pdf,application/pdf", server: true },
-  { id: "docx-to-pdf", from: "docx", to: "pdf", action: "server", category: "document", label: "Word to PDF", hint: "Server · Phase 3", icon: "server", color: "slate", accept: ".docx", server: true },
-  { id: "pptx-to-pdf", from: "pptx", to: "pdf", action: "server", category: "document", label: "PowerPoint to PDF", hint: "Server · Phase 3", icon: "presentation", color: "slate", accept: ".pptx", server: true },
-  { id: "djvu-to-pdf", from: "djvu", to: "pdf", action: "server", category: "ebook", label: "DjVu to PDF", hint: "Server · Phase 3", icon: "server", color: "slate", accept: ".djvu", server: true },
-  { id: "mobi-to-epub", from: "mobi", to: "epub", action: "server", category: "ebook", label: "MOBI to EPUB", hint: "Server · Phase 3", icon: "server", color: "slate", accept: ".mobi", server: true },
-  { id: "dwg-to-pdf", from: "dwg", to: "pdf", action: "server", category: "document", label: "DWG to PDF", hint: "Server · Phase 3", icon: "server", color: "slate", accept: ".dwg,.dxf", server: true },
+  { id: "pdf-to-docx", from: "pdf", to: "docx", action: "server", category: "document", label: "PDF to Word", hint: "Server · Phase 3", icon: "server", color: "slate", accept: ".pdf,application/pdf", status: "planned" },
+  { id: "pdf-to-xlsx", from: "pdf", to: "xlsx", action: "server", category: "document", label: "PDF to Excel", hint: "Server · Phase 3", icon: "server", color: "slate", accept: ".pdf,application/pdf", status: "planned" },
+  { id: "pdf-to-pptx", from: "pdf", to: "pptx", action: "server", category: "document", label: "PDF to PowerPoint", hint: "Server · Phase 3", icon: "presentation", color: "slate", accept: ".pdf,application/pdf", status: "planned" },
+  { id: "docx-to-pdf", from: "docx", to: "pdf", action: "server", category: "document", label: "Word to PDF", hint: "Server · Phase 3", icon: "server", color: "slate", accept: ".docx", status: "planned" },
+  { id: "pptx-to-pdf", from: "pptx", to: "pdf", action: "server", category: "document", label: "PowerPoint to PDF", hint: "Server · Phase 3", icon: "presentation", color: "slate", accept: ".pptx", status: "planned" },
+  { id: "djvu-to-pdf", from: "djvu", to: "pdf", action: "server", category: "ebook", label: "DjVu to PDF", hint: "Server · Phase 3", icon: "server", color: "slate", accept: ".djvu", status: "planned" },
+  { id: "mobi-to-epub", from: "mobi", to: "epub", action: "server", category: "ebook", label: "MOBI to EPUB", hint: "Server · Phase 3", icon: "server", color: "slate", accept: ".mobi", status: "planned" },
+  { id: "dwg-to-pdf", from: "dwg", to: "pdf", action: "server", category: "document", label: "DWG to PDF", hint: "Server · Phase 3", icon: "server", color: "slate", accept: ".dwg,.dxf", status: "planned" },
 ];
 
 const imageModule = () => import("./image");
@@ -704,7 +704,7 @@ const ocrModule = () => import("./ocr");
 const ebookModule = () => import("./ebook");
 
 for (const tool of tools) {
-  if (tool.server) continue;
+  if (tool.status === "planned") continue;
   if (tool.id === "image-to-text") tool.load = ocrModule;
   else if (tool.category === "image") tool.load = imageModule;
   else if (tool.category === "pdf") tool.load = pdfModule;
@@ -715,6 +715,7 @@ for (const tool of tools) {
 }
 
 export const toolById = new Map(tools.map((t) => [t.id, t]));
+export const availableTools = tools.filter((t) => t.status !== "planned");
 
 export const categoryMeta: Record<Category, { label: string; color: ColorName }> = {
   pdf: { label: "PDF", color: "rose" },
@@ -725,5 +726,3 @@ export const categoryMeta: Record<Category, { label: string; color: ColorName }>
   video: { label: "Video", color: "orange" },
   ebook: { label: "Ebook", color: "cyan" },
 };
-
-export const liveTools = tools.filter((t) => !t.server);

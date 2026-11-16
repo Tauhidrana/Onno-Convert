@@ -15,6 +15,9 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const { slug } = await params;
   const tool = toolById.get(slug);
   if (!tool) return { title: "Tool not found" };
+  if (tool.status === "planned") {
+    return { title: tool.label, description: "Not available yet. No files are processed or uploaded." };
+  }
   return { title: tool.label, description: `${tool.label} in your browser. ${tool.hint}. Files never leave your device.` };
 }
 
@@ -39,21 +42,21 @@ export default async function ToolPage({ params }: { params: Promise<{ slug: str
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-black/40 dark:text-white/40">
             {categoryMeta[tool.category].label}
-            {tool.server && " · Server tool"}
+            {tool.status === "planned" && " · Planned"}
           </p>
           <h1 className="mt-0.5 text-2xl font-semibold tracking-tight sm:text-3xl">{tool.label}</h1>
-          <p className="mt-1 text-sm text-black/55 dark:text-white/55">{tool.hint}</p>
+          {tool.status !== "planned" && (
+            <p className="mt-1 text-sm text-black/55 dark:text-white/55">{tool.hint}</p>
+          )}
         </div>
       </div>
 
       <div className="mt-7">
-        {tool.server ? (
+        {tool.status === "planned" ? (
           <div className="rounded-2xl border border-black/10 bg-white p-6 text-sm shadow-sm dark:border-white/10 dark:bg-white/5">
-            <p className="font-semibold">This tool needs a server. Phase 3 — not built yet.</p>
+            <p className="font-semibold">Not available yet</p>
             <p className="mt-2 text-black/60 dark:text-white/60">
-              Onno Convert Phase 1 and 2 run entirely in your browser. Converting {tool.from.toUpperCase()} to{" "}
-              {tool.to.toUpperCase()} at full fidelity needs LibreOffice, Calibre or a native renderer, which cannot run
-              in a static site. No conversion request is sent anywhere today.
+              This tool is planned for a future release. No files are processed or uploaded.
             </p>
           </div>
         ) : (
@@ -63,7 +66,7 @@ export default async function ToolPage({ params }: { params: Promise<{ slug: str
 
       <p className="mt-6 flex items-center gap-2 text-xs text-black/45 dark:text-white/45">
         <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
-        Processed on this device. Nothing is uploaded.
+        {tool.status === "planned" ? "No files are processed or uploaded." : "Processed on this device. Nothing is uploaded."}
       </p>
     </main>
   );

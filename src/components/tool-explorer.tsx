@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Search, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { categoryMeta, tools, type Tool } from "@/convert/registry";
+import { availableTools, categoryMeta, type Tool } from "@/convert/registry";
 import { groupOf, type ToolGroup } from "@/convert/types";
 import { ToolIcon } from "@/components/tool-icon";
 import { tileColor } from "@/components/colors";
@@ -40,7 +40,7 @@ export function ToolExplorer() {
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return tools.filter((tool) => {
+    return availableTools.filter((tool) => {
       if (tab !== "all" && groupOf(tool.from, tool.to) !== tab) return false;
       if (!q) return true;
       return [tool.label, tool.hint, tool.from, tool.to, tool.category, tool.id].join(" ").toLowerCase().includes(q);
@@ -134,11 +134,6 @@ function ToolCard({ tool }: { tool: Tool }) {
         <span className="flex-1">
           <span className="flex items-center gap-2 text-[15px] font-semibold leading-snug">
             {tool.label}
-            {tool.server && (
-              <span className="rounded-full bg-slate-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600 dark:bg-slate-400/20 dark:text-slate-300">
-                Server
-              </span>
-            )}
           </span>
           <span className="mt-0.5 block text-xs text-black/50 dark:text-white/50">{tool.hint}</span>
         </span>

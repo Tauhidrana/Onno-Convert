@@ -5,7 +5,7 @@ import { PDFDocument } from "pdf-lib";
 import { chromium, type Browser, type Page } from "playwright";
 import JSZip from "jszip";
 import * as XLSX from "xlsx";
-import { tools } from "../src/convert/registry";
+import { availableTools, tools } from "../src/convert/registry";
 import type { Tool } from "../src/convert/registry";
 
 const root = resolve(import.meta.dir, "..");
@@ -49,7 +49,7 @@ async function waitForServer(server: ReturnType<typeof spawn>) {
 async function writeStaticFixtures() {
   await mkdir(outputDir, { recursive: true });
 
-  for (const tool of tools.filter((item) => !item.server)) {
+  for (const tool of availableTools) {
     let ext = tool.from === "image" ? "jpg" : tool.from;
     if (tool.from === "audio") ext = "wav";
     if (tool.from === "video") ext = "mp4";
@@ -485,9 +485,10 @@ async function validateDownload(page: Page, tool: Tool, filename: string, bytes:
 
 async function testTool(page: Page, tool: Tool) {
   await page.goto(`${baseUrl}/convert/${tool.id}`);
-  if (tool.server) {
-    await page.getByText("This tool needs a server. Phase 3 — not built yet.").waitFor();
-    return "server UI";
+  if (tool.status === "planned") {
+    await page.getByText("Not available yet").waitFor();
+    assert((await page.locator('input[type="file"]').count()) === 0, "Planned routes must not expose file inputs.");
+    return "planned UI";
   }
 
   const ext = tool.from === "image" ? "jpg" : tool.from === "audio" ? "wav" : tool.from === "video" ? "mp4" : tool.from;
@@ -543,6 +544,38 @@ async function testTool(page: Page, tool: Tool) {
   const { filename, bytes } = await readDownload(page, tool);
   await validateDownload(page, tool, filename, bytes);
   return `${filename} (${bytes.length} bytes)`;
+}
+
+async function testPlannedToolDiscovery(browser: Browser) {
+  const page = await browser.newPage();
+  const planned = tools.filter((tool) => tool.status === "planned");
+  assert(planned.length === 8, `Expected 8 planned tools, found ${planned.length}.`);
+  try {
+    await page.goto(baseUrl);
+    for (const tool of planned) {
+      assert(
+        (await page.locator(`a[href="/convert/${tool.id}"]`).count()) === 0,
+        `${tool.id} is visible in the home grid.`,
+      );
+    }
+
+    const search = page.getByRole("searchbox", { name: "Search tools" });
+    for (const tool of planned) {
+      await search.fill(tool.id);
+      await page.getByText("No tool matches that search.").waitFor();
+      assert((await page.locator(`a[href="/convert/${tool.id}"]`).count()) === 0, `${tool.id} is searchable.`);
+    }
+
+    const response = await fetch(`${baseUrl}/sitemap.xml`);
+    assert(response.ok, "Sitemap request failed.");
+    const sitemap = await response.text();
+    assert(sitemap.includes("/convert/png-to-jpg"), "Sitemap is missing an available tool.");
+    for (const tool of planned) {
+      assert(!sitemap.includes(`/convert/${tool.id}`), `${tool.id} is present in the sitemap.`);
+    }
+  } finally {
+    await page.close();
+  }
 }
 
 async function testImageQuality(browser: Browser) {
@@ -810,6 +843,7 @@ async function main() {
     await page.close();
 
     for (const [name, check] of [
+      ["planned tools stay out of discovery", () => testPlannedToolDiscovery(browser)],
       ["image quality option", () => testImageQuality(browser)],
       ["PDF image JPG/WebP options", () => testPdfImageFormats(browser)],
       ["cancellation", () => testCancellation(browser)],
