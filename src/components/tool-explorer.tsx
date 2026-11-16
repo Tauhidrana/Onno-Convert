@@ -50,12 +50,11 @@ export function ToolExplorer() {
   return (
     <section id="tools" className="mx-auto w-full max-w-6xl scroll-mt-20 px-4 sm:px-6">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div className="flex flex-wrap gap-1 rounded-xl border border-black/5 bg-white p-1 shadow-sm dark:border-white/10 dark:bg-white/5" role="tablist" aria-label="Tool categories">
+        <div className="flex flex-wrap gap-1 rounded-xl border border-black/5 bg-white p-1 shadow-sm dark:border-white/10 dark:bg-white/5" role="group" aria-label="Tool categories">
           {tabs.map((t) => (
             <button
               key={t.id}
-              role="tab"
-              aria-selected={tab === t.id}
+              aria-pressed={tab === t.id}
               onClick={() => setTab(t.id)}
               className={cn(
                 "rounded-lg px-3.5 py-2 text-sm font-medium transition",
@@ -143,7 +142,7 @@ function ToolCard({ tool }: { tool: Tool }) {
           </span>
           <span className="mt-0.5 block text-xs text-black/50 dark:text-white/50">{tool.hint}</span>
         </span>
-        <span className="text-[11px] font-medium text-black/35 dark:text-white/35">{categoryMeta[tool.category].label}</span>
+        <span className="text-[11px] font-medium text-black/60 dark:text-white/60">{categoryMeta[tool.category].label}</span>
       </Link>
     </li>
   );

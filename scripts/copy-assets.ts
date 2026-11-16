@@ -1,10 +1,13 @@
 // Copies the static wasm/worker assets that must be served from /public.
-import { cpSync, mkdirSync } from "node:fs";
+import { cpSync, mkdirSync, rmSync } from "node:fs";
 
+// These ignored directories contain only copied and build-generated assets.
+for (const path of ["public/ffmpeg", "public/pdf", "public/worker"]) {
+  rmSync(path, { recursive: true, force: true });
+  mkdirSync(path, { recursive: true });
+}
 mkdirSync("public/ffmpeg/pkg", { recursive: true });
 mkdirSync("public/ffmpeg/sdk", { recursive: true });
-mkdirSync("public/pdf", { recursive: true });
-mkdirSync("public/worker", { recursive: true });
 
 cpSync("node_modules/@ffmpeg/core/dist/esm/ffmpeg-core.js", "public/ffmpeg/ffmpeg-core.js");
 cpSync("node_modules/@ffmpeg/core/dist/esm/ffmpeg-core.wasm", "public/ffmpeg/ffmpeg-core.wasm");
@@ -17,7 +20,6 @@ for (const f of ["index.js", "classes.js", "const.js", "errors.js", "types.js", 
   cpSync(`node_modules/@ffmpeg/ffmpeg/dist/esm/${f}`, `public/ffmpeg/sdk/${f}`);
 }
 cpSync("node_modules/pdfjs-dist/build/pdf.worker.min.mjs", "public/pdf/pdf.worker.min.mjs");
-cpSync("node_modules/@jsquash/avif/codec/enc/avif_enc.wasm", "public/worker/avif_enc.wasm");
 console.log("static assets copied");
 
 // The conversion worker is bundled by bun, not Turbopack (see runner.ts).
@@ -32,4 +34,5 @@ if (!result.success) {
   for (const log of result.logs) console.error(log);
   process.exit(1);
 }
+cpSync("node_modules/@jsquash/avif/codec/enc/avif_enc.wasm", "public/worker/avif_enc.wasm");
 console.log("conversion worker built");

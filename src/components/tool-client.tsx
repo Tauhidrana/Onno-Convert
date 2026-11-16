@@ -183,7 +183,7 @@ export function ToolClient({ toolId }: { toolId: string }) {
             addFiles(e.dataTransfer.files);
           }}
           className={cn(
-            "flex cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed px-6 py-12 text-center transition",
+            "flex cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed px-6 py-12 text-center transition focus-within:outline-2 focus-within:outline-brand focus-within:outline-offset-2",
             dragging
               ? "border-brand bg-brand-soft dark:bg-brand/10"
               : "border-black/15 bg-white hover:border-brand/50 dark:border-white/15 dark:bg-white/[0.03] dark:hover:border-brand/50",
@@ -251,8 +251,16 @@ export function ToolClient({ toolId }: { toolId: string }) {
                         )}
                       </p>
                       {(item.status === "running" || item.progress > 0) && item.status !== "error" && (
-                        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-black/10 dark:bg-white/10" aria-hidden="true">
+                        <div
+                          className="mt-2 h-1.5 overflow-hidden rounded-full bg-black/10 dark:bg-white/10"
+                          role="progressbar"
+                          aria-label={`Converting ${item.file.name}`}
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                          aria-valuenow={Math.round(item.progress * 100)}
+                        >
                           <div
+                            aria-hidden="true"
                             className="h-full rounded-full bg-brand transition-[width]"
                             style={{ width: `${Math.round(item.progress * 100)}%` }}
                           />
@@ -307,7 +315,7 @@ export function ToolClient({ toolId }: { toolId: string }) {
         {results.length > 0 && (
           <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4 dark:border-emerald-400/20 dark:bg-emerald-400/10">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-200">
+              <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-200" role="status" aria-live="polite">
                 {results.length} {results.length === 1 ? "file" : "files"} ready
               </p>
               <button

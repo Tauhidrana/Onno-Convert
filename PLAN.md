@@ -36,8 +36,8 @@ Quality:
 - [x] all 54 registry entries (46 live tools and 8 server UI routes)
 - [x] Corrupt PDF error, cancellation without stale output, and multi-file flows
 - [x] Per-file warning above 200 MiB (implementation inspected; no 200 MiB file was uploaded)
-- [ ] a11y pass, Lighthouse ≥ 90 home
-- [ ] Vercel deploy config + steps
+- [x] Keyboard/focus and screen-reader status improvements; Lighthouse home scores 100 mobile and desktop
+- [x] Vercel config checked (`vercel.json`); production build passes (remote deploy not run)
 
 ## Phase 2 — voice & OCR (not started)
 - [ ] Whisper STT (bn/en) → txt/srt
@@ -116,12 +116,15 @@ Phase 2 speech-to-text, OCR, and voice recorder are not registry entries and rem
 - Main-thread converters suppress output after cancellation but may finish their current async operation before returning to idle; Web Worker tasks terminate immediately, and FFmpeg cancellation terminates its engine.
 - `reorder-pdf` now preserves the full original order when the page-order field is blank; explicit orders still allow omitted pages to be dropped.
 - The 200 MiB warning threshold is present in the UI but was not exercised with a file that large.
+- The static asset build clears ignored generated directories before copying; repeated builds no longer retain duplicate FFmpeg/PDF/AVIF assets.
 
 ## Next step
-Complete the accessibility/Lighthouse and Vercel deployment checks, then begin Phase 2.
+Begin Phase 2; deployment steps are included in the final handoff.
 
 ## Handoff notes
 - `bun run test` passes: production build plus 59 Chromium checks; standalone `bun run typecheck` passed.
+- Lighthouse 13.6.0 reports 100 mobile and desktop for performance, accessibility, best practices, and SEO.
+- Clean generated public assets total about 41 MiB (worker 9 MiB, FFmpeg 31 MiB, PDF worker 1 MiB); no conflict-suffixed duplicates remain.
 - `bun run lint` cannot run because no lint script exists; no linter was added.
 - Chromium 159 returns PNG for the AVIF canvas encode request; the lazy `@jsquash/avif` fallback passed both AVIF output tests.
 - VP9 encoding in the bundled FFmpeg WASM core trapped with out-of-bounds memory; MP4-to-WebM now uses the verified VP8+Vorbis profile.
