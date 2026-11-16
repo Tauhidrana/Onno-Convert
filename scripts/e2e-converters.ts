@@ -57,27 +57,29 @@ async function writeStaticFixtures() {
     const source =
       tool.id === "speech-to-text"
         ? join(fixtureDir, "speech-en.wav")
-        : tool.id === "image-to-text"
+        : tool.id === "voice-recorder"
           ? null
-          : tool.from === "html"
+          : tool.id === "image-to-text"
             ? null
-            : tool.from === "webp"
+            : tool.from === "html"
               ? null
-              : tool.id === "text-to-pdf"
+              : tool.from === "webp"
                 ? null
-                : tool.id === "mp3-to-wav" ||
-                    tool.id === "m4a-to-mp3" ||
-                    tool.id === "ogg-to-mp3" ||
-                    tool.id === "flac-to-mp3" ||
-                    tool.id === "mov-to-mp4" ||
-                    tool.id === "mkv-to-mp4" ||
-                    tool.id === "avi-to-mp4" ||
-                    tool.id === "webm-to-mp4" ||
-                    tool.id === "mp4-to-webm" ||
-                    tool.id === "mp4-to-mp3" ||
-                    tool.id === "compress-video"
+                : tool.id === "text-to-pdf"
                   ? null
-                  : join(fixtureDir, `sample.${ext}`);
+                  : tool.id === "mp3-to-wav" ||
+                      tool.id === "m4a-to-mp3" ||
+                      tool.id === "ogg-to-mp3" ||
+                      tool.id === "flac-to-mp3" ||
+                      tool.id === "mov-to-mp4" ||
+                      tool.id === "mkv-to-mp4" ||
+                      tool.id === "avi-to-mp4" ||
+                      tool.id === "webm-to-mp4" ||
+                      tool.id === "mp4-to-webm" ||
+                      tool.id === "mp4-to-mp3" ||
+                      tool.id === "compress-video"
+                    ? null
+                    : join(fixtureDir, `sample.${ext}`);
 
     if (source) {
       const destination = join(outputDir, `${tool.id}.${ext}`);
@@ -696,10 +698,58 @@ async function testSpeechSrt(page: Page) {
   assert(text.toLowerCase().includes("communication channels"), "English SRT is missing the expected transcript.");
 }
 
+async function testVoiceRecorder(browser: Browser) {
+  const tool = tools.find((item) => item.id === "voice-recorder");
+  assert(tool, "Missing voice-recorder tool.");
+  const context = await browser.newContext({ permissions: ["microphone"] });
+  const page = await context.newPage();
+  try {
+    for (const format of ["mp3", "wav"] as const) {
+      await page.goto(`${baseUrl}/convert/${tool.id}`);
+      await page.getByLabel("Output").selectOption(format);
+      await page.getByRole("button", { name: "Start recording" }).click();
+      await page.getByRole("button", { name: "Stop recording" }).waitFor();
+      await page.waitForTimeout(1200);
+      await page.getByRole("button", { name: "Stop recording" }).click();
+      await page.getByText(/voice-recording\.(webm|m4a|ogg)/).waitFor();
+      await page.getByRole("button", { name: "Convert", exact: true }).click();
+      const outcome = await Promise.race([
+        page.getByText(/\d+ files? ready/).waitFor({ timeout: 180_000 }).then(() => "ready" as const),
+        page.locator("p[role=alert]").first().waitFor({ timeout: 180_000 }).then(() => "error" as const),
+      ]);
+      if (outcome === "error") {
+        const message = (await page.locator("p[role=alert]").allTextContents()).join(" ").trim();
+        throw new Error(message || `Voice recording to ${format.toUpperCase()} failed.`);
+      }
+
+      const { filename, bytes } = await readDownload(page, tool);
+      assert(filename.endsWith(`.${format}`), `Downloaded ${filename}, expected .${format}.`);
+      if (format === "wav") {
+        const data = Buffer.from(bytes);
+        assert(data.toString("ascii", 0, 4) === "RIFF" && data.toString("ascii", 8, 12) === "WAVE", "Invalid voice recording WAV output.");
+      } else {
+        assert(
+          Buffer.from(bytes).toString("ascii", 0, 3) === "ID3" || (bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0),
+          "Invalid voice recording MP3 output.",
+        );
+      }
+      assert((await audioDuration(page, bytes, format)) > 0.5, `Voice recording ${format.toUpperCase()} output has no audio.`);
+    }
+  } finally {
+    await context.close();
+  }
+}
+
 async function main() {
   await writeStaticFixtures();
   let server: ReturnType<typeof spawn> | undefined;
-  const browser = await chromium.launch({ args: ["--autoplay-policy=no-user-gesture-required"] });
+  const browser = await chromium.launch({
+    args: [
+      "--autoplay-policy=no-user-gesture-required",
+      "--use-fake-device-for-media-stream",
+      "--use-fake-ui-for-media-stream",
+    ],
+  });
   try {
     if (!externalUrl) {
       server = spawn(process.execPath, ["run", "start"], {
@@ -721,6 +771,7 @@ async function main() {
     const failures: string[] = [];
     let extraPasses = 0;
     for (const tool of tools) {
+      if (tool.id === "voice-recorder") continue;
       try {
         const result = await testTool(page, tool);
         console.log(`PASS ${tool.id}: ${result}`);
@@ -747,6 +798,14 @@ async function main() {
       const message = error instanceof Error ? error.message : String(error);
       failures.push(`English speech to SRT: ${message}`);
       console.error(`FAIL English speech to SRT: ${message}`);
+    }
+    try {
+      await testVoiceRecorder(browser);
+      console.log("PASS voice recorder MP3 and WAV");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      failures.push(`voice recorder: ${message}`);
+      console.error(`FAIL voice recorder: ${message}`);
     }
     await page.close();
 

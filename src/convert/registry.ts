@@ -417,6 +417,31 @@ export const tools: Tool[] = [
 
   // Audio
   {
+    id: "voice-recorder",
+    from: "microphone",
+    to: "audio",
+    action: "record",
+    category: "audio",
+    label: "Voice Recorder",
+    hint: "Record to MP3 or WAV",
+    icon: "mic",
+    color: "violet",
+    accept: "audio/*",
+    options: [
+      {
+        key: "format",
+        label: "Output",
+        type: "select",
+        default: "mp3",
+        options: [
+          { value: "mp3", label: "MP3" },
+          { value: "wav", label: "WAV" },
+        ],
+      },
+    ],
+    note: "Requires microphone permission. Recording and conversion stay on this device; ffmpeg.wasm downloads about 31 MB on first use.",
+  },
+  {
     id: "speech-to-text",
     from: "audio",
     to: "txt",

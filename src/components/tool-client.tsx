@@ -18,6 +18,7 @@ import { runPrint, runTool, type RunHandle } from "@/convert/runner";
 import { MAX_SAFE_BYTES, type ConvertOptions, type Field, type OutputFile } from "@/convert/types";
 import { baseName, cn, formatBytes } from "@/lib/utils";
 import { saveBlob, saveZip } from "@/lib/download";
+import { VoiceRecorder } from "@/components/voice-recorder";
 
 type Status = "queued" | "running" | "done" | "error";
 type Item = { key: string; file: File; status: Status; progress: number; error?: string };
@@ -171,43 +172,53 @@ export function ToolClient({ toolId }: { toolId: string }) {
   return (
     <div className="grid gap-5 lg:grid-cols-[1fr_300px]">
       <div className="min-w-0">
-        <label
-          onDragOver={(e) => {
-            e.preventDefault();
-            setDragging(true);
-          }}
-          onDragLeave={() => setDragging(false)}
-          onDrop={(e) => {
-            e.preventDefault();
-            setDragging(false);
-            addFiles(e.dataTransfer.files);
-          }}
-          className={cn(
-            "flex cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed px-6 py-12 text-center transition focus-within:outline-2 focus-within:outline-brand focus-within:outline-offset-2",
-            dragging
-              ? "border-brand bg-brand-soft dark:bg-brand/10"
-              : "border-black/15 bg-white hover:border-brand/50 dark:border-white/15 dark:bg-white/[0.03] dark:hover:border-brand/50",
-          )}
-        >
-          <span className="flex h-11 w-11 items-center justify-center rounded-full bg-brand-soft text-brand dark:bg-brand/20 dark:text-violet-300">
-            <Upload className="h-5 w-5" />
-          </span>
-          <span className="text-sm font-medium">
-            Drop {tool.multiple ? "files" : "a file"} here or <span className="text-brand underline">browse</span>
-          </span>
-          <span className="max-w-sm text-xs text-black/45 dark:text-white/45">
-            {tool.accept.replaceAll(",", " · ")} {tool.multiple ? "· multiple allowed" : ""}
-          </span>
-          <input
-            ref={inputRef}
-            type="file"
-            accept={tool.accept}
-            multiple={tool.multiple}
-            onChange={(e) => addFiles(e.target.files)}
-            className="sr-only"
-            aria-label={`Choose ${tool.multiple ? "files" : "a file"}`}
+        {tool.id === "voice-recorder" ? (
+          <VoiceRecorder
+            onRecorded={(file) => {
+              setItems([{ key: crypto.randomUUID(), file, status: "queued", progress: 0 }]);
+              setResults([]);
+              setMessage("");
+            }}
           />
-        </label>
+        ) : (
+          <label
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragging(true);
+            }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragging(false);
+              addFiles(e.dataTransfer.files);
+            }}
+            className={cn(
+              "flex cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed px-6 py-12 text-center transition focus-within:outline-2 focus-within:outline-brand focus-within:outline-offset-2",
+              dragging
+                ? "border-brand bg-brand-soft dark:bg-brand/10"
+                : "border-black/15 bg-white hover:border-brand/50 dark:border-white/15 dark:bg-white/[0.03] dark:hover:border-brand/50",
+            )}
+          >
+            <span className="flex h-11 w-11 items-center justify-center rounded-full bg-brand-soft text-brand dark:bg-brand/20 dark:text-violet-300">
+              <Upload className="h-5 w-5" />
+            </span>
+            <span className="text-sm font-medium">
+              Drop {tool.multiple ? "files" : "a file"} here or <span className="text-brand underline">browse</span>
+            </span>
+            <span className="max-w-sm text-xs text-black/45 dark:text-white/45">
+              {tool.accept.replaceAll(",", " · ")} {tool.multiple ? "· multiple allowed" : ""}
+            </span>
+            <input
+              ref={inputRef}
+              type="file"
+              accept={tool.accept}
+              multiple={tool.multiple}
+              onChange={(e) => addFiles(e.target.files)}
+              className="sr-only"
+              aria-label={`Choose ${tool.multiple ? "files" : "a file"}`}
+            />
+          </label>
+        )}
 
         {message && (
           <p className="mt-3 flex items-start gap-2 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-400/10 dark:text-amber-200" role="status">

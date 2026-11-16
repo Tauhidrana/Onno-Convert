@@ -48,6 +48,7 @@ const CODEC: Record<string, string[]> = {
 
 export const convert: ConverterModule["convert"] = async (files, opts, onProgress) => {
   const file = files[0];
+  if (!file) throw new Error("No audio recording was provided.");
   const action = String(opts.__action);
   const sourceExt = extOf(file.name) || "bin";
   const { fetchFile } = await import("@ffmpeg/util");
@@ -61,6 +62,11 @@ export const convert: ConverterModule["convert"] = async (files, opts, onProgres
     if (end <= start) throw new Error("End time must be greater than start time.");
     target = String(opts.format) === "wav" ? "wav" : "mp3";
     args = ["-ss", String(start), "-to", String(end), ...CODEC[target]];
+  } else if (action === "record") {
+    const format = String(opts.format);
+    if (format !== "mp3" && format !== "wav") throw new Error("Choose MP3 or WAV for the recording.");
+    target = format;
+    args = CODEC[target];
   } else if (action === "compress-video") {
     target = "mp4";
     const crf = String(Math.min(34, Math.max(18, Number(opts.crf) || 28)));

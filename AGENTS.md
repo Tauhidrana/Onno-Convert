@@ -70,7 +70,7 @@ bun run test         # production build + Chromium converter e2e
 
 ## Current phase
 
-Phase 1 is complete. Phase 2 speech-to-text and image OCR are client-side; voice recording remains. Phase 3 tools are not built and are marked "Server" with a clear message.
+Phase 1 and Phase 2 are complete. Speech-to-text, image OCR, and voice recording are client-side. Phase 3 tools are not built and are marked "Server" with a clear message.
 
 <!-- BEGIN:nextjs-agent-rules -->
 
