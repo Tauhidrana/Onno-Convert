@@ -404,6 +404,41 @@ export const tools: Tool[] = [
 
   // Audio
   {
+    id: "speech-to-text",
+    from: "audio",
+    to: "txt",
+    action: "transcribe",
+    category: "audio",
+    label: "Speech to Text",
+    hint: "Whisper · English and Bengali",
+    icon: "file-text",
+    color: "violet",
+    accept: ".mp3,.wav,.m4a,.ogg,.oga,.flac,.webm,audio/*",
+    options: [
+      {
+        key: "language",
+        label: "Language",
+        type: "select",
+        default: "english",
+        options: [
+          { value: "english", label: "English" },
+          { value: "bengali", label: "Bengali" },
+        ],
+      },
+      {
+        key: "format",
+        label: "Output",
+        type: "select",
+        default: "txt",
+        options: [
+          { value: "txt", label: "TXT" },
+          { value: "srt", label: "SRT subtitles" },
+        ],
+      },
+    ],
+    note: "The multilingual Whisper model downloads about 70 MB on first use and is cached by your browser. Bengali may be romanized instead of written in Bengali script.",
+  },
+  {
     id: "mp3-to-wav",
     from: "mp3",
     to: "wav",
@@ -626,6 +661,7 @@ const imageModule = () => import("./image");
 const pdfModule = () => import("./pdf");
 const dataModule = () => import("./data");
 const mediaModule = () => import("./media");
+const speechModule = () => import("./speech");
 const ebookModule = () => import("./ebook");
 
 for (const tool of tools) {
@@ -633,6 +669,7 @@ for (const tool of tools) {
   if (tool.category === "image") tool.load = imageModule;
   else if (tool.category === "pdf") tool.load = pdfModule;
   else if (tool.category === "data") tool.load = dataModule;
+  else if (tool.id === "speech-to-text") tool.load = speechModule;
   else if (tool.category === "audio" || tool.category === "video") tool.load = mediaModule;
   else if (tool.category === "ebook") tool.load = ebookModule;
 }

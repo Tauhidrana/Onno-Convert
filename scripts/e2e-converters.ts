@@ -55,25 +55,27 @@ async function writeStaticFixtures() {
     if (tool.from === "video") ext = "mp4";
 
     const source =
-      tool.from === "html"
-        ? null
-        : tool.from === "webp"
+      tool.id === "speech-to-text"
+        ? join(fixtureDir, "speech-en.wav")
+        : tool.from === "html"
           ? null
-        : tool.id === "text-to-pdf"
-          ? null
-          : tool.id === "mp3-to-wav" ||
-              tool.id === "m4a-to-mp3" ||
-              tool.id === "ogg-to-mp3" ||
-              tool.id === "flac-to-mp3" ||
-              tool.id === "mov-to-mp4" ||
-              tool.id === "mkv-to-mp4" ||
-              tool.id === "avi-to-mp4" ||
-              tool.id === "webm-to-mp4" ||
-              tool.id === "mp4-to-webm" ||
-              tool.id === "mp4-to-mp3" ||
-              tool.id === "compress-video"
+          : tool.from === "webp"
             ? null
-            : join(fixtureDir, `sample.${ext}`);
+            : tool.id === "text-to-pdf"
+              ? null
+              : tool.id === "mp3-to-wav" ||
+                  tool.id === "m4a-to-mp3" ||
+                  tool.id === "ogg-to-mp3" ||
+                  tool.id === "flac-to-mp3" ||
+                  tool.id === "mov-to-mp4" ||
+                  tool.id === "mkv-to-mp4" ||
+                  tool.id === "avi-to-mp4" ||
+                  tool.id === "webm-to-mp4" ||
+                  tool.id === "mp4-to-webm" ||
+                  tool.id === "mp4-to-mp3" ||
+                  tool.id === "compress-video"
+                ? null
+                : join(fixtureDir, `sample.${ext}`);
 
     if (source) {
       const destination = join(outputDir, `${tool.id}.${ext}`);
@@ -96,6 +98,7 @@ async function writeStaticFixtures() {
     "<!doctype html><html><body><h1>Onno Convert fixture</h1><p>HTML print output.</p><script>window.parent.__htmlScriptExecuted = true</script></body></html>",
   );
 
+  await copyFile(join(fixtureDir, "speech-bn.wav"), join(outputDir, "speech-bn.wav"));
   await copyFile(join(fixtureDir, "sample.png"), join(outputDir, "image-to-pdf-second.png"));
   await copyFile(join(fixtureDir, "sample-text.pdf"), join(outputDir, "merge-pdf-second.pdf"));
 
@@ -274,6 +277,7 @@ async function generateMediaFixtures(page: Page) {
 function expectedExtension(tool: Tool): string {
   if (tool.action === "print") return "print";
   if (tool.action === "images" || tool.action === "csv") return "zip";
+  if (tool.action === "transcribe") return "txt";
   if (tool.action === "image-pdf" || tool.action === "text-pdf" || tool.action === "xlsx-pdf" || tool.action === "epub-pdf") return "pdf";
   if (tool.action === "text" || tool.action === "epub-text") return "txt";
   if (["merge", "split", "rotate", "compress", "reorder"].includes(tool.action)) return "pdf";
@@ -382,6 +386,9 @@ async function validateFile(page: Page, tool: Tool, filename: string, bytes: Uin
     if (ext === "csv") assert(text.includes("pencil"), "CSV output is missing expected data.");
     if (tool.id === "pdf-to-text") assert(text.includes("Extractable text layer"), "PDF text output is missing expected content.");
     if (tool.id === "epub-to-text") assert(text.includes("Chapter One"), "EPUB text output is missing expected content.");
+    if (tool.id === "speech-to-text") {
+      assert(text.toLowerCase().includes("communication channels"), "English speech was not transcribed.");
+    }
   } else if (ext === "wav") {
     const data = Buffer.from(bytes);
     assert(data.toString("ascii", 0, 4) === "RIFF" && data.toString("ascii", 8, 12) === "WAVE", "Invalid WAV signature.");
@@ -620,6 +627,46 @@ async function testCorruptInput(browser: Browser) {
   }
 }
 
+async function testBengaliSpeech(page: Page) {
+  const tool = tools.find((item) => item.id === "speech-to-text");
+  assert(tool, "Missing speech-to-text tool.");
+  await page.goto(`${baseUrl}/convert/${tool.id}`);
+  await page.locator('input[type="file"]').setInputFiles(join(outputDir, "speech-bn.wav"));
+  await page.getByLabel("Language").selectOption("bengali");
+  assert((await page.getByLabel("Language").inputValue()) === "bengali", "Bengali language selection was not applied.");
+  await page.getByRole("button", { name: "Convert", exact: true }).click();
+  const outcome = await Promise.race([
+    page.getByText(/\d+ files? ready/).waitFor({ timeout: 180_000 }).then(() => "ready" as const),
+    page.locator("p[role=alert]").first().waitFor({ timeout: 180_000 }).then(() => "error" as const),
+  ]);
+  if (outcome === "error") {
+    const message = (await page.locator("p[role=alert]").allTextContents()).join(" ").trim();
+    throw new Error(message || "Bengali speech transcription failed.");
+  }
+  const { filename, bytes } = await readDownload(page, tool);
+  assert(filename.endsWith(".txt"), `Downloaded ${filename}, expected a TXT transcript.`);
+  const text = new TextDecoder().decode(bytes);
+  assert(text.toLowerCase().includes("baadam"), `The Bengali fixture was not transcribed: ${text}`);
+  assert(/haznel|keguli/i.test(text), "Bengali transcript is missing expected fixture words.");
+}
+
+async function testSpeechSrt(page: Page) {
+  const tool = tools.find((item) => item.id === "speech-to-text");
+  assert(tool, "Missing speech-to-text tool.");
+  await page.goto(`${baseUrl}/convert/${tool.id}`);
+  await page.locator('input[type="file"]').setInputFiles(join(outputDir, `${tool.id}.wav`));
+  await page.getByLabel("Language").selectOption("english");
+  await page.getByLabel("Output").selectOption("srt");
+  await page.getByRole("button", { name: "Convert", exact: true }).click();
+  await page.getByText(/\d+ files? ready/).waitFor({ timeout: 180_000 });
+  const { filename, bytes } = await readDownload(page, tool);
+  assert(filename.endsWith(".srt"), `Downloaded ${filename}, expected an SRT subtitle file.`);
+  const text = new TextDecoder().decode(bytes);
+  const timestamp = text.match(/(\d{2}:\d{2}:\d{2},\d{3}) --> (\d{2}:\d{2}:\d{2},\d{3})/);
+  assert(timestamp && timestamp[2] !== "00:00:00,000", "SRT timestamps are missing or have zero duration.");
+  assert(text.toLowerCase().includes("communication channels"), "English SRT is missing the expected transcript.");
+}
+
 async function main() {
   await writeStaticFixtures();
   let server: ReturnType<typeof spawn> | undefined;
@@ -652,6 +699,24 @@ async function main() {
         failures.push(`${tool.id}: ${message}`);
         console.error(`FAIL ${tool.id}: ${message}`);
       }
+    }
+    try {
+      await testBengaliSpeech(page);
+      extraPasses++;
+      console.log("PASS Bengali speech to text");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      failures.push(`Bengali speech to text: ${message}`);
+      console.error(`FAIL Bengali speech to text: ${message}`);
+    }
+    try {
+      await testSpeechSrt(page);
+      extraPasses++;
+      console.log("PASS English speech to SRT");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      failures.push(`English speech to SRT: ${message}`);
+      console.error(`FAIL English speech to SRT: ${message}`);
     }
     await page.close();
 

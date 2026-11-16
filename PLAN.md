@@ -33,14 +33,14 @@ Converters:
 
 Quality:
 - [x] real fixtures + Chromium Playwright suite
-- [x] all 54 registry entries (46 live tools and 8 server UI routes)
+- [x] all 55 registry entries (47 live tools and 8 server UI routes)
 - [x] Corrupt PDF error, cancellation without stale output, and multi-file flows
 - [x] Per-file warning above 200 MiB (implementation inspected; no 200 MiB file was uploaded)
 - [x] Keyboard/focus and screen-reader status improvements; Lighthouse home scores 100 mobile and desktop
 - [x] Vercel config checked (`vercel.json`); production build passes (remote deploy not run)
 
-## Phase 2 — voice & OCR (not started)
-- [ ] Whisper STT (bn/en) → txt/srt
+## Phase 2 — voice & OCR
+- [x] Whisper STT (English/Bengali) → TXT/SRT
 - [ ] OCR (ben+eng)
 - [ ] voice recorder
 
@@ -49,7 +49,7 @@ Quality:
 - [ ] marked "Server" in UI; proposal with cost/tradeoffs first
 
 ## Verification status
-`bun run test` builds production assets and passed 59 Chromium 159 checks: all 54 registry entries (46 live, 8 server UI routes) plus image quality, PDF image JPG/WebP output, cancellation, reorder-default retention, and corrupt-PDF handling. Outputs were downloaded and validated with signatures, dimensions, EXIF removal, PDF page counts/rotation/order, workbook/CSV content, and media duration. HTML-to-PDF's print call was intercepted; its print preview blocks uploaded scripts and has no downloadable blob.
+`bun run test` builds production assets and passed 62 Chromium 159 checks: all 55 registry entries (47 live, 8 server UI routes), English TXT/SRT and Bengali TXT speech transcription, plus image quality, PDF image JPG/WebP output, cancellation, reorder-default retention, and corrupt-PDF handling. Outputs were downloaded and validated with signatures, dimensions, EXIF removal, PDF page counts/rotation/order, workbook/CSV content, media duration, and real FLEURS speech content. HTML-to-PDF's print call was intercepted; its print preview blocks uploaded scripts and has no downloadable blob.
 
 | Tool | Status |
 |---|---|
@@ -90,6 +90,7 @@ Quality:
 | `ogg-to-mp3` | works |
 | `flac-to-mp3` | works |
 | `mp4-to-mp3` | works |
+| `speech-to-text` | works (English TXT/SRT and Bengali TXT; Bengali may be Romanized) |
 | `trim-audio` | works |
 | `mov-to-mp4` | works |
 | `mkv-to-mp4` | works |
@@ -108,7 +109,7 @@ Quality:
 | `mobi-to-epub` | missing (intentional Phase 3 server tool; UI verified) |
 | `dwg-to-pdf` | missing (intentional Phase 3 server tool; UI verified) |
 
-Phase 2 speech-to-text, OCR, and voice recorder are not registry entries and remain unimplemented.
+OCR and voice recorder remain unimplemented.
 
 ## Audit notes
 - The registry exposes 18 selected image pairs, not every possible source/target combination. SVG and HEIC are input-only; GIF and TIFF output encoders are not exposed as tools.
@@ -117,16 +118,20 @@ Phase 2 speech-to-text, OCR, and voice recorder are not registry entries and rem
 - `reorder-pdf` now preserves the full original order when the page-order field is blank; explicit orders still allow omitted pages to be dropped.
 - The 200 MiB warning threshold is present in the UI but was not exercised with a file that large.
 - The static asset build clears ignored generated directories before copying; repeated builds no longer retain duplicate FFmpeg/PDF/AVIF assets.
+- Whisper base is loaded only on first use, then cached by the browser; its quantized files total about 70 MiB. Language is selected explicitly because Transformers.js currently defaults to English rather than detecting Whisper languages. The Bengali fixture is transcribed as Romanized text rather than Bengali script.
+- Bengali and English E2E speech clips are from Google FLEURS under CC BY 4.0; see `test-fixtures/ATTRIBUTION.txt`.
+- Speech audio decoding and Whisper inference run in the page; inference is CPU-intensive and cancellation cannot interrupt a model call already in progress.
 
 ## Next step
-Begin Phase 2; deployment steps are included in the final handoff.
+Implement OCR with Bengali+English language data, then add the voice recorder.
 
 ## Handoff notes
-- `bun run test` passes: production build plus 59 Chromium checks; standalone `bun run typecheck` passed.
+- `bun run test` passes: production build plus 62 Chromium checks; standalone `bun run typecheck` passed.
 - Lighthouse 13.6.0 reports 100 mobile and desktop for performance, accessibility, best practices, and SEO.
 - Clean generated public assets total about 41 MiB (worker 9 MiB, FFmpeg 31 MiB, PDF worker 1 MiB); no conflict-suffixed duplicates remain.
 - `bun run lint` cannot run because no lint script exists; no linter was added.
 - Chromium 159 returns PNG for the AVIF canvas encode request; the lazy `@jsquash/avif` fallback passed both AVIF output tests.
 - VP9 encoding in the bundled FFmpeg WASM core trapped with out-of-bounds memory; MP4-to-WebM now uses the verified VP8+Vorbis profile.
+- `bun run test` now passes 62 Chromium checks including real English/Bengali Whisper TXT outputs and English SRT timestamps. Bengali output may be Romanized.
 - E2E creates slug-named fixtures under ignored `test-fixtures/out/`; generated video/audio inputs and EXIF-bearing JPEGs are synthetic and local.
 - The prior `test-fixtures/sample.mp4` is malformed and unused. The prior `sample.webm` identifies as Big Buck Bunny and is unused; neither is included in the test suite.
