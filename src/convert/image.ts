@@ -2,6 +2,9 @@ import { outputName } from "@/lib/utils";
 import type { ConvertOptions, ConverterModule, OutputFile } from "./types";
 
 type Canvas = OffscreenCanvas | HTMLCanvasElement;
+type AvifEncoder = typeof import("./avif-encoder");
+
+const avifEncoderUrl = "/worker/avif-encoder.js";
 
 const hasOffscreen = () => typeof OffscreenCanvas !== "undefined";
 
@@ -118,11 +121,21 @@ async function encode(canvas: Canvas, ext: string, quality: number): Promise<Blo
   if (ext === "png") return canvasToBlob(canvas, "image/png");
   if (ext === "webp") return canvasToBlob(canvas, "image/webp", quality);
   if (ext === "avif") {
-    const blob = await canvasToBlob(canvas, "image/avif", quality);
-    if (blob.type !== "image/avif") {
-      throw new Error("This browser cannot encode AVIF. Use Chrome or Edge, or convert to WebP instead.");
+    try {
+      const blob = await canvasToBlob(canvas, "image/avif", quality);
+      if (blob.type === "image/avif") return blob;
+    } catch {
+      // Unsupported formats may reject instead of returning PNG.
     }
-    return blob;
+
+    const { encode: encodeAvif } = (await import(
+      /* webpackIgnore: true */
+      /* turbopackIgnore: true */
+      avifEncoderUrl
+    )) as AvifEncoder;
+    const imageData = context(canvas).getImageData(0, 0, canvas.width, canvas.height);
+    const buffer = await encodeAvif(imageData, { quality: Math.round(quality * 100) });
+    return new Blob([buffer], { type: "image/avif" });
   }
   if (ext === "gif") {
     const { GIFEncoder, quantize, applyPalette } = await import("gifenc");

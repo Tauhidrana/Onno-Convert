@@ -43,7 +43,7 @@ const CODEC: Record<string, string[]> = {
   mp3: ["-vn", "-c:a", "libmp3lame", "-q:a", "2"],
   wav: ["-vn", "-c:a", "pcm_s16le"],
   mp4: ["-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart"],
-  webm: ["-c:v", "libvpx-vp9", "-crf", "36", "-b:v", "0", "-deadline", "realtime", "-cpu-used", "5", "-c:a", "libopus", "-b:a", "96k"],
+  webm: ["-c:v", "libvpx", "-crf", "32", "-b:v", "0", "-deadline", "realtime", "-cpu-used", "5", "-c:a", "libvorbis", "-q:a", "4"],
 };
 
 export const convert: ConverterModule["convert"] = async (files, opts, onProgress) => {

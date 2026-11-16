@@ -40,10 +40,11 @@ All heavy libraries are dynamically imported per tool; the home page loads none.
 
 ```bash
 bun install          # deps
+bunx playwright install chromium # e2e browser
 bun run dev          # dev server (localhost:3000)
 bun run build        # production build (must pass before commit)
 bun run typecheck    # tsc --noEmit
-bun run test         # converter round-trip fixtures (node/bun)
+bun run test         # production build + Chromium converter e2e
 ```
 
 ## Structure

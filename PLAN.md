@@ -32,8 +32,8 @@ Converters:
 - [ ] EPUB → text / PDF-lite
 
 Quality:
-- [ ] fixtures + round-trip script
-- [ ] real-file test of every converter (browser)
+- [x] real fixtures + Chromium Playwright suite
+- [x] real-file test of every registry entry (46 live tools and 8 server UI routes)
 - [ ] 200 MB warn, corrupt input, cancel, multi-file
 - [ ] a11y pass, Lighthouse ≥ 90 home
 - [ ] Vercel deploy config + steps
@@ -48,73 +48,74 @@ Quality:
 - [ ] marked "Server" in UI; proposal with cost/tradeoffs first
 
 ## Verification status
-Code audit of `src/convert/registry.ts` found 46 client-side entries mapped to converter modules. No entry is marked "works" until independently exercised in Chromium with a real input and output validation.
+`bun run test` builds production assets and ran all 54 registry entries in Chromium 159. Client-side outputs were downloaded and checked for signatures plus image dimensions, PDF page counts, workbook/CSV content, and media duration. HTML-to-PDF's print call was intercepted; its documented flow has no downloadable blob.
 
 | Tool | Status |
 |---|---|
-| `png-to-jpg` | untested |
-| `jpg-to-png` | untested |
-| `png-to-webp` | untested |
-| `jpg-to-webp` | untested |
-| `webp-to-jpg` | untested |
-| `webp-to-png` | untested |
-| `heic-to-jpg` | untested |
-| `heic-to-png` | untested |
-| `avif-to-jpg` | untested |
-| `avif-to-png` | untested |
-| `png-to-avif` | broken: Chromium 159 canvas AVIF probe returned `image/png`; no fallback yet |
-| `jpg-to-avif` | broken: Chromium 159 canvas AVIF probe returned `image/png`; no fallback yet |
-| `svg-to-png` | untested |
-| `svg-to-jpg` | untested |
-| `tiff-to-jpg` | untested |
-| `tiff-to-png` | untested |
-| `gif-to-png` | untested |
-| `gif-to-jpg` | untested |
-| `image-to-pdf` | untested |
-| `pdf-to-image` | untested |
-| `pdf-to-text` | untested |
-| `text-to-pdf` | untested |
-| `html-to-pdf` | untested (print flow; no downloadable blob) |
-| `merge-pdf` | untested |
-| `split-pdf` | untested |
-| `rotate-pdf` | untested |
-| `compress-pdf` | untested |
-| `reorder-pdf` | untested |
-| `csv-to-xlsx` | untested |
-| `xlsx-to-csv` | untested |
-| `xlsx-to-pdf` | untested |
-| `mp3-to-wav` | untested |
-| `wav-to-mp3` | untested |
-| `m4a-to-mp3` | untested |
-| `ogg-to-mp3` | untested |
-| `flac-to-mp3` | untested |
-| `mp4-to-mp3` | untested |
-| `trim-audio` | untested |
-| `mov-to-mp4` | untested |
-| `mkv-to-mp4` | untested |
-| `avi-to-mp4` | untested |
-| `webm-to-mp4` | untested |
-| `mp4-to-webm` | untested |
-| `compress-video` | untested |
-| `epub-to-pdf` | untested |
-| `epub-to-text` | untested |
-| `pdf-to-docx` | missing (intentional Phase 3 server tool) |
-| `pdf-to-xlsx` | missing (intentional Phase 3 server tool) |
-| `pdf-to-pptx` | missing (intentional Phase 3 server tool) |
-| `docx-to-pdf` | missing (intentional Phase 3 server tool) |
-| `pptx-to-pdf` | missing (intentional Phase 3 server tool) |
-| `djvu-to-pdf` | missing (intentional Phase 3 server tool) |
-| `mobi-to-epub` | missing (intentional Phase 3 server tool) |
-| `dwg-to-pdf` | missing (intentional Phase 3 server tool) |
+| `png-to-jpg` | works |
+| `jpg-to-png` | works |
+| `png-to-webp` | works |
+| `jpg-to-webp` | works |
+| `webp-to-jpg` | works |
+| `webp-to-png` | works |
+| `heic-to-jpg` | works |
+| `heic-to-png` | works |
+| `avif-to-jpg` | works |
+| `avif-to-png` | works |
+| `png-to-avif` | works (lazy WASM fallback; Chromium canvas encoder unsupported) |
+| `jpg-to-avif` | works (lazy WASM fallback; Chromium canvas encoder unsupported) |
+| `svg-to-png` | works |
+| `svg-to-jpg` | works |
+| `tiff-to-jpg` | works |
+| `tiff-to-png` | works |
+| `gif-to-png` | works |
+| `gif-to-jpg` | works |
+| `image-to-pdf` | works |
+| `pdf-to-image` | works (3 pages in ZIP) |
+| `pdf-to-text` | works |
+| `text-to-pdf` | works |
+| `html-to-pdf` | works (print invoked; no downloadable blob) |
+| `merge-pdf` | works (4 pages) |
+| `split-pdf` | works |
+| `rotate-pdf` | works (3 pages) |
+| `compress-pdf` | works (3 pages) |
+| `reorder-pdf` | works |
+| `csv-to-xlsx` | works |
+| `xlsx-to-csv` | works (2 CSV files in ZIP) |
+| `xlsx-to-pdf` | works |
+| `mp3-to-wav` | works |
+| `wav-to-mp3` | works |
+| `m4a-to-mp3` | works |
+| `ogg-to-mp3` | works |
+| `flac-to-mp3` | works |
+| `mp4-to-mp3` | works |
+| `trim-audio` | works |
+| `mov-to-mp4` | works |
+| `mkv-to-mp4` | works |
+| `avi-to-mp4` | works |
+| `webm-to-mp4` | works |
+| `mp4-to-webm` | works (VP8 + Vorbis) |
+| `compress-video` | works |
+| `epub-to-pdf` | works |
+| `epub-to-text` | works |
+| `pdf-to-docx` | missing (intentional Phase 3 server tool; UI verified) |
+| `pdf-to-xlsx` | missing (intentional Phase 3 server tool; UI verified) |
+| `pdf-to-pptx` | missing (intentional Phase 3 server tool; UI verified) |
+| `docx-to-pdf` | missing (intentional Phase 3 server tool; UI verified) |
+| `pptx-to-pdf` | missing (intentional Phase 3 server tool; UI verified) |
+| `djvu-to-pdf` | missing (intentional Phase 3 server tool; UI verified) |
+| `mobi-to-epub` | missing (intentional Phase 3 server tool; UI verified) |
+| `dwg-to-pdf` | missing (intentional Phase 3 server tool; UI verified) |
 
 Phase 2 speech-to-text, OCR, and voice recorder are not registry entries and remain unimplemented.
 
 ## Next step
-Add a Chromium Playwright run that converts and validates a real fixture for every live registry entry.
+Audit remaining Phase 1 requirements against the verified registry and close only confirmed gaps.
 
 ## Handoff notes
-- `bun install`, `bun run typecheck`, and `bun run build` pass.
+- `bun run test` passes: production build plus 54 Chromium checks; `bun run typecheck` passed before the final test run and the build typecheck passed again.
 - `bun run lint` cannot run because no lint script exists; no linter was added.
-- `bun run test` fails because `test/roundtrip.ts` is missing; not changed during the build-only milestone.
-- `test-fixtures/` is untracked handoff work; `sample.mp4` is not decodable by the installed FFmpeg probe and needs replacement before video tools can be verified.
-- Chromium 159 does not encode AVIF via `canvas.toBlob`; `@jsquash/avif` 2.1.1 is installed for the required lazy fallback.
+- Chromium 159 returns PNG for the AVIF canvas encode request; the lazy `@jsquash/avif` fallback passed both AVIF output tests.
+- VP9 encoding in the bundled FFmpeg WASM core trapped with out-of-bounds memory; MP4-to-WebM now uses the verified VP8+Vorbis profile.
+- E2E creates slug-named fixtures under ignored `test-fixtures/out/`; generated video/audio inputs are synthetic and local.
+- The prior `test-fixtures/sample.mp4` is malformed and unused. The prior `sample.webm` identifies as Big Buck Bunny and is unused; neither is included in the test suite.

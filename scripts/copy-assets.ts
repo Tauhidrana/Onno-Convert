@@ -4,6 +4,7 @@ import { cpSync, mkdirSync } from "node:fs";
 mkdirSync("public/ffmpeg/pkg", { recursive: true });
 mkdirSync("public/ffmpeg/sdk", { recursive: true });
 mkdirSync("public/pdf", { recursive: true });
+mkdirSync("public/worker", { recursive: true });
 
 cpSync("node_modules/@ffmpeg/core/dist/esm/ffmpeg-core.js", "public/ffmpeg/ffmpeg-core.js");
 cpSync("node_modules/@ffmpeg/core/dist/esm/ffmpeg-core.wasm", "public/ffmpeg/ffmpeg-core.wasm");
@@ -16,11 +17,12 @@ for (const f of ["index.js", "classes.js", "const.js", "errors.js", "types.js", 
   cpSync(`node_modules/@ffmpeg/ffmpeg/dist/esm/${f}`, `public/ffmpeg/sdk/${f}`);
 }
 cpSync("node_modules/pdfjs-dist/build/pdf.worker.min.mjs", "public/pdf/pdf.worker.min.mjs");
+cpSync("node_modules/@jsquash/avif/codec/enc/avif_enc.wasm", "public/worker/avif_enc.wasm");
 console.log("static assets copied");
 
 // The conversion worker is bundled by bun, not Turbopack (see runner.ts).
 const result = await Bun.build({
-  entrypoints: ["src/convert/worker.ts"],
+  entrypoints: ["src/convert/worker.ts", "src/convert/avif-encoder.ts"],
   outdir: "public/worker",
   splitting: true,
   format: "esm",

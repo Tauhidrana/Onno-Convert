@@ -557,11 +557,11 @@ export const tools: Tool[] = [
     action: "webm",
     category: "video",
     label: "MP4 to WebM",
-    hint: "VP9 + Opus",
+    hint: "VP8 + Vorbis",
     icon: "video",
     color: "orange",
     accept: ".mp4,.m4v,video/mp4",
-    note: "VP9 encoding is slow in wasm. Short clips only.",
+    note: "VP8 encoding is faster in wasm; large clips may run out of memory.",
   },
   {
     id: "compress-video",
