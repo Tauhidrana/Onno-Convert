@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { copyFile, mkdir, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { PDFDocument } from "pdf-lib";
-import { chromium, type Page } from "playwright";
+import { chromium, type Browser, type Page } from "playwright";
 import JSZip from "jszip";
 import * as XLSX from "xlsx";
 import { tools } from "../src/convert/registry";
@@ -14,9 +14,22 @@ const outputDir = join(fixtureDir, "out");
 const port = Number(process.env.E2E_PORT || 3187);
 const externalUrl = process.env.E2E_BASE_URL;
 const baseUrl = externalUrl || `http://127.0.0.1:${port}`;
+const exifMarker = Buffer.from("Exif\0\0", "binary");
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
+}
+
+function addExifSegment(jpeg: Buffer) {
+  const tiff = Buffer.from([
+    0x49, 0x49, 0x2a, 0, 8, 0, 0, 0,
+    1, 0, 0x12, 0x01, 3, 0, 1, 0, 0, 0, 1, 0, 0, 0,
+    0, 0, 0, 0,
+  ]);
+  const payload = Buffer.concat([exifMarker, tiff]);
+  const length = Buffer.alloc(2);
+  length.writeUInt16BE(payload.length + 2);
+  return Buffer.concat([jpeg.subarray(0, 2), Buffer.from([0xff, 0xe1]), length, payload, jpeg.subarray(2)]);
 }
 
 async function waitForServer(server: ReturnType<typeof spawn>) {
@@ -62,7 +75,16 @@ async function writeStaticFixtures() {
             ? null
             : join(fixtureDir, `sample.${ext}`);
 
-    if (source) await copyFile(source, join(outputDir, `${tool.id}.${ext}`));
+    if (source) {
+      const destination = join(outputDir, `${tool.id}.${ext}`);
+      if (ext === "jpg") {
+        const jpeg = addExifSegment(Buffer.from(await Bun.file(source).arrayBuffer()));
+        assert(jpeg.includes(exifMarker), "The JPEG fixture must contain EXIF metadata.");
+        await writeFile(destination, jpeg);
+      } else {
+        await copyFile(source, destination);
+      }
+    }
   }
 
   await writeFile(
@@ -71,11 +93,18 @@ async function writeStaticFixtures() {
   );
   await writeFile(
     join(outputDir, "html-to-pdf.html"),
-    "<!doctype html><html><body><h1>Onno Convert fixture</h1><p>HTML print output.</p></body></html>",
+    "<!doctype html><html><body><h1>Onno Convert fixture</h1><p>HTML print output.</p><script>window.parent.__htmlScriptExecuted = true</script></body></html>",
   );
 
   await copyFile(join(fixtureDir, "sample.png"), join(outputDir, "image-to-pdf-second.png"));
   await copyFile(join(fixtureDir, "sample-text.pdf"), join(outputDir, "merge-pdf-second.pdf"));
+
+  const reorderPdf = await PDFDocument.create();
+  for (const [index, width] of [300, 400, 500].entries()) {
+    const page = reorderPdf.addPage([width, 600]);
+    page.drawText(`Page ${index + 1}`);
+  }
+  await writeFile(join(outputDir, "reorder-pdf.pdf"), await reorderPdf.save());
 }
 
 async function generateWebpFixture(page: Page) {
@@ -299,6 +328,9 @@ async function videoDuration(page: Page, bytes: Uint8Array, ext: string) {
 
 async function validateFile(page: Page, tool: Tool, filename: string, bytes: Uint8Array) {
   const ext = filename.slice(filename.lastIndexOf(".") + 1).toLowerCase();
+  if (tool.id.startsWith("jpg-to-")) {
+    assert(!Buffer.from(bytes).includes(exifMarker), "The converted image still contains EXIF metadata.");
+  }
   if (ext === "png") {
     assert(Buffer.from(bytes.subarray(0, 8)).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])), "Invalid PNG signature.");
     const dimensions = await imageDimensions(page, bytes, ext);
@@ -307,6 +339,7 @@ async function validateFile(page: Page, tool: Tool, filename: string, bytes: Uin
     assert(bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff, "Invalid JPEG signature.");
     const dimensions = await imageDimensions(page, bytes, ext);
     assert(dimensions.width > 0 && dimensions.height > 0, "JPEG dimensions are empty.");
+    if (tool.id === "png-to-jpg") assert(dimensions.width <= 100, "Max-width option was not applied.");
   } else if (ext === "webp") {
     assert(Buffer.from(bytes).toString("ascii", 0, 4) === "RIFF" && Buffer.from(bytes).toString("ascii", 8, 12) === "WEBP", "Invalid WebP signature.");
     const dimensions = await imageDimensions(page, bytes, ext);
@@ -321,12 +354,28 @@ async function validateFile(page: Page, tool: Tool, filename: string, bytes: Uin
     assert(Buffer.from(bytes).toString("ascii", 0, 5) === "%PDF-", "Invalid PDF signature.");
     const pdf = await PDFDocument.load(bytes);
     const count = pdf.getPageCount();
-    const expected = tool.id === "image-to-pdf" ? 2 : tool.id === "merge-pdf" ? 4 : tool.id === "split-pdf" || tool.id === "reorder-pdf" ? 1 : tool.id === "rotate-pdf" || tool.id === "compress-pdf" ? 3 : 1;
+    const expected = tool.id === "image-to-pdf" ? 2 : tool.id === "merge-pdf" ? 4 : tool.id === "split-pdf" ? 2 : tool.id === "rotate-pdf" || tool.id === "compress-pdf" || tool.id === "reorder-pdf" ? 3 : 1;
     assert(count === expected, `PDF has ${count} page(s), expected ${expected}.`);
+    if (tool.id === "image-to-pdf") {
+      const { width, height } = pdf.getPage(0).getSize();
+      assert(width > height, "Image-to-PDF did not honor automatic landscape orientation.");
+    }
+    if (tool.id === "rotate-pdf") {
+      assert(pdf.getPage(0).getRotation().angle === 0, "Rotate PDF changed an unselected page.");
+      assert(pdf.getPage(1).getRotation().angle === 180, "Rotate PDF did not apply the selected angle.");
+    }
+    if (tool.id === "reorder-pdf") {
+      const widths = pdf.getPages().map((page) => page.getWidth());
+      assert(widths.join(",") === "500,300,400", `Pages were not reordered: ${widths.join(",")}.`);
+    }
   } else if (ext === "xlsx") {
     assert(bytes[0] === 0x50 && bytes[1] === 0x4b, "Invalid XLSX ZIP signature.");
     const workbook = XLSX.read(bytes, { type: "array" });
     assert(workbook.SheetNames.length > 0, "XLSX has no worksheets.");
+    if (tool.id === "csv-to-xlsx") {
+      const rows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { header: 1 });
+      assert(JSON.stringify(rows).includes("pencil"), "XLSX output is missing expected CSV data.");
+    }
   } else if (ext === "csv" || ext === "txt") {
     const text = new TextDecoder().decode(bytes);
     assert(text.length > 0, `${ext.toUpperCase()} output is empty.`);
@@ -339,7 +388,9 @@ async function validateFile(page: Page, tool: Tool, filename: string, bytes: Uin
     assert((await audioDuration(page, bytes, ext)) > 0, "WAV duration is empty.");
   } else if (ext === "mp3") {
     assert((Buffer.from(bytes).toString("ascii", 0, 3) === "ID3") || (bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0), "Invalid MP3 signature.");
-    assert((await audioDuration(page, bytes, ext)) > 0, "MP3 duration is empty.");
+    const duration = await audioDuration(page, bytes, ext);
+    assert(duration > 0, "MP3 duration is empty.");
+    if (tool.id === "trim-audio") assert(duration > 0.8 && duration < 1.2, `Trimmed audio duration was ${duration}s, expected about 1s.`);
   } else if (ext === "mp4" || ext === "mov") {
     assert(Buffer.from(bytes).toString("ascii", 4, 8) === "ftyp", `Invalid ${ext.toUpperCase()} container signature.`);
     assert((await videoDuration(page, bytes, ext)) > 0, `${ext.toUpperCase()} duration is empty.`);
@@ -417,6 +468,17 @@ async function testTool(page: Page, tool: Tool) {
   }
 
   await page.locator('input[type="file"]').setInputFiles(inputs);
+  if (tool.id === "png-to-jpg") await page.getByLabel("Max width (px)").fill("100");
+  if (tool.id === "split-pdf") await page.getByLabel("Ranges").fill("2-3");
+  if (tool.id === "rotate-pdf") {
+    await page.getByLabel("Angle").selectOption("180");
+    await page.getByLabel("Pages").fill("2");
+  }
+  if (tool.id === "reorder-pdf") await page.getByLabel("Page order").fill("3,1,2");
+  if (tool.id === "trim-audio") {
+    await page.getByLabel("Start (seconds)").fill("0.5");
+    await page.getByLabel("End (seconds)").fill("1.5");
+  }
   if (tool.action === "print") {
     await page.getByRole("button", { name: "Open print dialog" }).click();
     await page.getByRole("status").getByText("Print dialog opened.").waitFor();
@@ -424,6 +486,10 @@ async function testTool(page: Page, tool: Tool) {
     assert(printFrame, "HTML print frame was not created.");
     const called = await printFrame.evaluate(() => (window as Window & { __printCalled?: boolean }).__printCalled);
     assert(called, "The HTML print flow did not invoke window.print().");
+    const scriptExecuted = await page.evaluate(
+      () => (window as Window & { __htmlScriptExecuted?: boolean }).__htmlScriptExecuted,
+    );
+    assert(!scriptExecuted, "HTML input scripts must not execute in the print preview.");
     return "print invoked";
   }
 
@@ -439,6 +505,119 @@ async function testTool(page: Page, tool: Tool) {
   const { filename, bytes } = await readDownload(page, tool);
   await validateDownload(page, tool, filename, bytes);
   return `${filename} (${bytes.length} bytes)`;
+}
+
+async function testImageQuality(browser: Browser) {
+  const page = await browser.newPage();
+  const tool = tools.find((item) => item.id === "jpg-to-webp");
+  assert(tool, "Missing JPG-to-WebP tool.");
+  try {
+    await page.goto(`${baseUrl}/convert/${tool.id}`);
+    await page.locator('input[type="file"]').setInputFiles(join(outputDir, `${tool.id}.jpg`));
+    const quality = page.getByLabel("Quality");
+
+    await quality.focus();
+    await quality.press("Home");
+    await page.getByRole("button", { name: "Convert", exact: true }).click();
+    await page.getByText(/\d+ files? ready/).waitFor();
+    const lowQuality = await readDownload(page, tool);
+
+    await quality.focus();
+    await quality.press("End");
+    await page.getByRole("button", { name: "Convert", exact: true }).click();
+    await page.getByText(/\d+ files? ready/).waitFor();
+    const highQuality = await readDownload(page, tool);
+    assert(
+      lowQuality.bytes.length < highQuality.bytes.length,
+      `Low-quality output (${lowQuality.bytes.length} bytes) was not smaller than high-quality output (${highQuality.bytes.length} bytes).`,
+    );
+  } finally {
+    await page.close();
+  }
+}
+
+async function testPdfImageFormats(browser: Browser) {
+  const page = await browser.newPage();
+  const tool = tools.find((item) => item.id === "pdf-to-image");
+  assert(tool, "Missing PDF-to-Images tool.");
+  try {
+    await page.goto(`${baseUrl}/convert/${tool.id}`);
+    await page.locator('input[type="file"]').setInputFiles(join(outputDir, `${tool.id}.pdf`));
+    await page.getByLabel("Resolution (DPI)").fill("72");
+    const ready = page.getByText(/\d+ files? ready/);
+
+    for (const [index, format] of ["jpg", "webp"].entries()) {
+      await page.getByLabel("Image format").selectOption(format);
+      await page.getByRole("button", { name: "Convert", exact: true }).click();
+      if (index > 0) await ready.waitFor({ state: "detached" });
+      await ready.waitFor({ state: "visible" });
+      const { filename, bytes } = await readDownload(page, tool);
+      await validateDownload(page, tool, filename, bytes);
+    }
+  } finally {
+    await page.close();
+  }
+}
+
+async function testCancellation(browser: Browser) {
+  const page = await browser.newPage();
+  try {
+    await page.addInitScript(() => {
+      const arrayBuffer = File.prototype.arrayBuffer;
+      File.prototype.arrayBuffer = function () {
+        return new Promise<ArrayBuffer>((resolve, reject) => {
+          setTimeout(() => arrayBuffer.call(this).then(resolve, reject), 1200);
+        });
+      };
+    });
+    await page.goto(`${baseUrl}/convert/image-to-pdf`);
+    await page.locator('input[type="file"]').setInputFiles(join(outputDir, "image-to-pdf.jpg"));
+    await page.getByRole("button", { name: "Convert", exact: true }).click();
+    await page.getByRole("button", { name: "Cancel", exact: true }).click();
+    await page.getByRole("button", { name: "Stopping…", exact: true }).waitFor();
+    await page.getByRole("button", { name: "Stopping…", exact: true }).waitFor({ state: "detached", timeout: 10_000 });
+    assert((await page.getByText(/\d+ files? ready/).count()) === 0, "Cancelled conversion produced downloadable output.");
+    assert(await page.getByRole("button", { name: "Convert", exact: true }).isEnabled(), "Cancelled tool did not return to idle state.");
+  } finally {
+    await page.close();
+  }
+}
+
+async function testReorderDefault(browser: Browser) {
+  const page = await browser.newPage();
+  const tool = tools.find((item) => item.id === "reorder-pdf");
+  assert(tool, "Missing PDF reorder tool.");
+  try {
+    await page.goto(`${baseUrl}/convert/${tool.id}`);
+    await page.locator('input[type="file"]').setInputFiles(join(outputDir, `${tool.id}.pdf`));
+    await page.getByRole("button", { name: "Convert", exact: true }).click();
+    await page.getByText(/\d+ files? ready/).waitFor();
+    const { bytes } = await readDownload(page, tool);
+    const pdf = await PDFDocument.load(bytes);
+    const widths = pdf.getPages().map((item) => item.getWidth());
+    assert(widths.join(",") === "300,400,500", `Default order dropped or moved pages: ${widths.join(",")}.`);
+  } finally {
+    await page.close();
+  }
+}
+
+async function testCorruptInput(browser: Browser) {
+  const page = await browser.newPage();
+  try {
+    await page.goto(`${baseUrl}/convert/pdf-to-text`);
+    await page.locator('input[type="file"]').setInputFiles({
+      name: "corrupt.pdf",
+      mimeType: "application/pdf",
+      buffer: Buffer.from("not a PDF"),
+    });
+    await page.getByRole("button", { name: "Convert", exact: true }).click();
+    const alert = page.locator("p[role=alert]").first();
+    await alert.waitFor();
+    assert((await alert.textContent())?.includes("could not be opened"), "Corrupt PDF did not show a useful error.");
+    assert((await page.getByText(/\d+ files? ready/).count()) === 0, "Corrupt PDF produced downloadable output.");
+  } finally {
+    await page.close();
+  }
 }
 
 async function main() {
@@ -463,6 +642,7 @@ async function main() {
 
     const page = await browser.newPage();
     const failures: string[] = [];
+    let extraPasses = 0;
     for (const tool of tools) {
       try {
         const result = await testTool(page, tool);
@@ -474,7 +654,26 @@ async function main() {
       }
     }
     await page.close();
-    console.log(`\n${tools.length - failures.length} passed; ${failures.length} failed.`);
+
+    for (const [name, check] of [
+      ["image quality option", () => testImageQuality(browser)],
+      ["PDF image JPG/WebP options", () => testPdfImageFormats(browser)],
+      ["cancellation", () => testCancellation(browser)],
+      ["reorder default retains pages", () => testReorderDefault(browser)],
+      ["corrupt input", () => testCorruptInput(browser)],
+    ] as const) {
+      try {
+        await check();
+        extraPasses++;
+        console.log(`PASS ${name}`);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        failures.push(`${name}: ${message}`);
+        console.error(`FAIL ${name}: ${message}`);
+      }
+    }
+
+    console.log(`\n${tools.length - failures.length + extraPasses} passed; ${failures.length} failed.`);
     if (failures.length) throw new Error(failures.join("\n"));
   } finally {
     await browser.close();

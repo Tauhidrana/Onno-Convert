@@ -99,7 +99,12 @@ function imagePair(from: string, to: string, label: string, icon: IconName = "im
     category: "image",
     label,
     hint: `${from.toUpperCase()} → ${ext.toUpperCase()}`,
-    note: "Metadata (EXIF/GPS) is removed and the image is re-encoded.",
+    note:
+      from === "gif"
+        ? "Animated GIFs use the first frame. Metadata (EXIF/GPS) is removed."
+        : from === "tiff"
+          ? "Multi-page TIFFs use the first image. Metadata (EXIF/GPS) is removed."
+          : "Metadata (EXIF/GPS) is removed and the image is re-encoded.",
     icon,
     color: "blue",
     accept: from === "heic" ? ".heic,image/heic" : from === "svg" ? ".svg,image/svg+xml" : from === "tiff" ? ".tif,.tiff,image/tiff" : `.${from}`,
@@ -137,7 +142,7 @@ export const tools: Tool[] = [
     action: "image-pdf",
     category: "pdf",
     label: "Image to PDF",
-    hint: "JPG, PNG, WebP, HEIC",
+    hint: "PNG, JPG, WebP, AVIF, HEIC, GIF, SVG, TIFF, BMP",
     icon: "file-text",
     color: "rose",
     accept: IMAGE,
@@ -338,8 +343,8 @@ export const tools: Tool[] = [
     color: "rose",
     accept: ".pdf,application/pdf",
     worker: true,
-    options: [{ key: "order", label: "Page order", type: "text", default: "1", placeholder: "3,1,2" }],
-    note: "Every page must be listed once. Missing pages are dropped.",
+    options: [{ key: "order", label: "Page order", type: "text", default: "", placeholder: "3,1,2" }],
+    note: "Leave blank to keep all pages in order. Enter page numbers to reorder; omitted pages are dropped.",
   },
 
   // Data

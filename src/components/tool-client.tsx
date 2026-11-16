@@ -105,6 +105,7 @@ export function ToolClient({ toolId }: { toolId: string }) {
         );
         handleRef.current = handle;
         const output = await handle.promise;
+        if (cancelledRef.current) return;
         setItems((prev) => prev.map((i) => ({ ...i, status: "done" as const, progress: 1 })));
         setResults(output);
       } else {
@@ -116,6 +117,7 @@ export function ToolClient({ toolId }: { toolId: string }) {
           handleRef.current = handle;
           try {
             const output = await handle.promise;
+            if (cancelledRef.current) break;
             collected.push(...output);
             patch(item.key, { status: "done", progress: 1 });
           } catch (error) {
@@ -142,7 +144,7 @@ export function ToolClient({ toolId }: { toolId: string }) {
   function cancel() {
     cancelledRef.current = true;
     handleRef.current?.cancel();
-    setRunning(false);
+    setMessage("Cancellation requested.");
     setItems((prev) =>
       prev.map((i) => (i.status === "running" ? { ...i, status: "queued" as const, progress: 0 } : i)),
     );
@@ -375,9 +377,10 @@ export function ToolClient({ toolId }: { toolId: string }) {
             {running && (
               <button
                 onClick={cancel}
+                disabled={cancelledRef.current}
                 className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-black/10 px-4 py-2.5 text-sm font-medium transition hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/10"
               >
-                <Trash2 className="h-4 w-4" /> Cancel
+                <Trash2 className="h-4 w-4" /> {cancelledRef.current ? "Stopping…" : "Cancel"}
               </button>
             )}
           </div>

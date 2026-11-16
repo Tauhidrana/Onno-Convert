@@ -21,20 +21,21 @@ Core:
 - [x] tool route: dropzone, queue, per-file progress, single + ZIP download, errors
 
 Converters:
-- [ ] Image: png/jpg/webp/avif/heic/gif/svg/tiff → raster; quality, resize, strip EXIF
-- [ ] Image → PDF (reorder, page size, margins)
-- [ ] PDF → PNG/JPG/WebP (DPI, ZIP)
-- [ ] PDF → text; text → PDF; HTML → PDF (print)
-- [ ] merge / split / rotate / compress-lite / reorder
-- [ ] CSV ↔ Excel, Excel → PDF-lite
-- [ ] Audio: mp3/wav/ogg/flac/m4a, mp4→mp3, trim (ffmpeg.wasm)
-- [ ] Video: mov/mkv/avi/webm→mp4, mp4→webm, compress (ffmpeg.wasm)
-- [ ] EPUB → text / PDF-lite
+- [x] Registered image pairs for PNG/JPG/WebP/AVIF/HEIC/GIF/SVG/TIFF; quality, resize, and EXIF removal
+- [x] Image → PDF (multi-file reorder, page size, margins)
+- [x] PDF → PNG/JPG/WebP (DPI, ZIP)
+- [x] PDF → text; text → PDF; HTML → PDF (print)
+- [x] Merge / split / rotate / compress-lite / reorder
+- [x] CSV ↔ Excel, Excel → PDF-lite
+- [x] Audio: mp3/wav/ogg/flac/m4a, mp4→mp3, trim (ffmpeg.wasm)
+- [x] Video: mov/mkv/avi/webm→mp4, mp4→webm, compress (ffmpeg.wasm)
+- [x] EPUB → text / PDF-lite
 
 Quality:
 - [x] real fixtures + Chromium Playwright suite
-- [x] real-file test of every registry entry (46 live tools and 8 server UI routes)
-- [ ] 200 MB warn, corrupt input, cancel, multi-file
+- [x] all 54 registry entries (46 live tools and 8 server UI routes)
+- [x] Corrupt PDF error, cancellation without stale output, and multi-file flows
+- [x] Per-file warning above 200 MiB (implementation inspected; no 200 MiB file was uploaded)
 - [ ] a11y pass, Lighthouse ≥ 90 home
 - [ ] Vercel deploy config + steps
 
@@ -48,7 +49,7 @@ Quality:
 - [ ] marked "Server" in UI; proposal with cost/tradeoffs first
 
 ## Verification status
-`bun run test` builds production assets and ran all 54 registry entries in Chromium 159. Client-side outputs were downloaded and checked for signatures plus image dimensions, PDF page counts, workbook/CSV content, and media duration. HTML-to-PDF's print call was intercepted; its documented flow has no downloadable blob.
+`bun run test` builds production assets and passed 59 Chromium 159 checks: all 54 registry entries (46 live, 8 server UI routes) plus image quality, PDF image JPG/WebP output, cancellation, reorder-default retention, and corrupt-PDF handling. Outputs were downloaded and validated with signatures, dimensions, EXIF removal, PDF page counts/rotation/order, workbook/CSV content, and media duration. HTML-to-PDF's print call was intercepted; its print preview blocks uploaded scripts and has no downloadable blob.
 
 | Tool | Status |
 |---|---|
@@ -109,13 +110,20 @@ Quality:
 
 Phase 2 speech-to-text, OCR, and voice recorder are not registry entries and remain unimplemented.
 
+## Audit notes
+- The registry exposes 18 selected image pairs, not every possible source/target combination. SVG and HEIC are input-only; GIF and TIFF output encoders are not exposed as tools.
+- Animated GIF conversion and multi-page TIFF conversion use the first frame/page.
+- Main-thread converters suppress output after cancellation but may finish their current async operation before returning to idle; Web Worker tasks terminate immediately, and FFmpeg cancellation terminates its engine.
+- `reorder-pdf` now preserves the full original order when the page-order field is blank; explicit orders still allow omitted pages to be dropped.
+- The 200 MiB warning threshold is present in the UI but was not exercised with a file that large.
+
 ## Next step
-Audit remaining Phase 1 requirements against the verified registry and close only confirmed gaps.
+Complete the accessibility/Lighthouse and Vercel deployment checks, then begin Phase 2.
 
 ## Handoff notes
-- `bun run test` passes: production build plus 54 Chromium checks; `bun run typecheck` passed before the final test run and the build typecheck passed again.
+- `bun run test` passes: production build plus 59 Chromium checks; standalone `bun run typecheck` passed.
 - `bun run lint` cannot run because no lint script exists; no linter was added.
 - Chromium 159 returns PNG for the AVIF canvas encode request; the lazy `@jsquash/avif` fallback passed both AVIF output tests.
 - VP9 encoding in the bundled FFmpeg WASM core trapped with out-of-bounds memory; MP4-to-WebM now uses the verified VP8+Vorbis profile.
-- E2E creates slug-named fixtures under ignored `test-fixtures/out/`; generated video/audio inputs are synthetic and local.
+- E2E creates slug-named fixtures under ignored `test-fixtures/out/`; generated video/audio inputs and EXIF-bearing JPEGs are synthetic and local.
 - The prior `test-fixtures/sample.mp4` is malformed and unused. The prior `sample.webm` identifies as Big Buck Bunny and is unused; neither is included in the test suite.

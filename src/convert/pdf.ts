@@ -231,12 +231,13 @@ export const convert: ConverterModule["convert"] = async (files, opts, onProgres
 
   if (action === "reorder") {
     const order = String(opts.order ?? "").trim();
-    if (!order) throw new Error("Enter a page order, e.g. 3,1,2.");
-    const indexes = order.split(",").map((s) => {
-      const n = Number(s.trim());
-      if (!Number.isInteger(n) || n < 1 || n > total) throw new Error(`Page ${s.trim()} is out of range (1–${total}).`);
-      return n - 1;
-    });
+    const indexes = order
+      ? order.split(",").map((s) => {
+          const n = Number(s.trim());
+          if (!Number.isInteger(n) || n < 1 || n > total) throw new Error(`Page ${s.trim()} is out of range (1–${total}).`);
+          return n - 1;
+        })
+      : Array.from({ length: total }, (_, index) => index);
     const doc = await PDFDocument.create();
     const copied = await doc.copyPages(source, indexes);
     copied.forEach((p) => doc.addPage(p));
@@ -254,6 +255,7 @@ export const print: NonNullable<ConverterModule["print"]> = async (files) => {
   const html = await files[0].text();
   const frame = document.createElement("iframe");
   frame.setAttribute("title", "HTML print preview");
+  frame.setAttribute("sandbox", "allow-same-origin allow-modals");
   frame.srcdoc = html;
   Object.assign(frame.style, {
     position: "fixed",
