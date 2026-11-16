@@ -6,3 +6,8 @@ out
 .DS_Store
 test-fixtures/out
 graphify-out/graph.html
+
+# generated assets
+public/worker
+public/ffmpeg
+public/pdf

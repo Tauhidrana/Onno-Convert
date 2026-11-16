@@ -5,6 +5,9 @@
 - [x] context-optimizer portable skills in `.opencode/skills/` + `.contextignore`
 - [x] graphify skill registered for OpenCode in `.opencode/` (graph built after scaffold)
 - [x] `AGENTS.md`, `PLAN.md`, git repo
+- [x] Bun install, typecheck, and production build
+- [x] Type definitions added for Bun APIs used by the asset/worker build script
+- [ ] Lint (no `lint` script is configured in `package.json`)
 
 ## Phase 1 — browser-only tools
 Scaffold:
@@ -43,3 +46,12 @@ Quality:
 ## Phase 3 — server-grade (needs approval + proposal)
 - [ ] PDF→DOCX/XLSX/PPTX, Office→PDF, DWG, DjVu, MOBI
 - [ ] marked "Server" in UI; proposal with cost/tradeoffs first
+
+## Next step
+Audit each converter in `src/convert/registry.ts`; record implementation and real-file test status here.
+
+## Handoff notes
+- `bun install`, `bun run typecheck`, and `bun run build` pass.
+- `bun run lint` cannot run because no lint script exists; no linter was added.
+- `bun run test` fails because `test/roundtrip.ts` is missing; not changed during the build-only milestone.
+- `test-fixtures/` contains the in-progress prior-agent fixtures; preserve them and verify each before marking a converter tested.

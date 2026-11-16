@@ -39,7 +39,9 @@ export function runTool(
   }
 
   const jobId = `job-${++jobSeq}`;
-  const worker = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
+  // Prebuilt by scripts/copy-assets.ts: Turbopack does not start a worker
+  // created from a bundled `new URL(...)` module in dev.
+  const worker = new Worker("/worker/worker.js", { type: "module" });
   let cancelWorker: () => void = () => {};
 
   const promise = new Promise<OutputFile[]>((resolve, reject) => {

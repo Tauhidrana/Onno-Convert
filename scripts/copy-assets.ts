@@ -17,3 +17,17 @@ for (const f of ["index.js", "classes.js", "const.js", "errors.js", "types.js", 
 }
 cpSync("node_modules/pdfjs-dist/build/pdf.worker.min.mjs", "public/pdf/pdf.worker.min.mjs");
 console.log("static assets copied");
+
+// The conversion worker is bundled by bun, not Turbopack (see runner.ts).
+const result = await Bun.build({
+  entrypoints: ["src/convert/worker.ts"],
+  outdir: "public/worker",
+  splitting: true,
+  format: "esm",
+  target: "browser",
+});
+if (!result.success) {
+  for (const log of result.logs) console.error(log);
+  process.exit(1);
+}
+console.log("conversion worker built");

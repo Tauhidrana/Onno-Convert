@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "bun scripts/copy-assets.ts && next dev",
     "build": "bun scripts/copy-assets.ts && next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
@@ -32,6 +32,7 @@
   "devDependencies": {
     "@dietrichgebert/ponytail": "5.3.3",
     "@tailwindcss/postcss": "4.3.5",
+    "@types/bun": "^1.4.4",
     "@types/node": "24.10.1",
     "@types/react": "19.2.2",
     "@types/react-dom": "19.2.2",
