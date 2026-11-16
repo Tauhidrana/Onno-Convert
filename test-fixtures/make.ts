@@ -76,6 +76,15 @@ writeFileSync(
 </svg>`,
 );
 
+writeFileSync(
+  `${dir}/ocr-text.svg`,
+  `<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="220" viewBox="0 0 1000 220">
+  <rect width="1000" height="220" fill="#ffffff"/>
+  <text x="32" y="82" font-family="Arial, sans-serif" font-size="54" fill="#111111">Onno Convert OCR</text>
+  <text x="32" y="164" font-family="Arial Unicode MS, sans-serif" font-size="54" fill="#111111">বাংলা ভাষা</text>
+</svg>`,
+);
+
 // 2-second sine wave, 44.1 kHz mono 16-bit.
 const sampleRate = 44100;
 const seconds = 2;

@@ -2,7 +2,7 @@
 import { cpSync, mkdirSync, rmSync } from "node:fs";
 
 // These ignored directories contain only copied and build-generated assets.
-for (const path of ["public/ffmpeg", "public/pdf", "public/worker"]) {
+for (const path of ["public/ffmpeg", "public/pdf", "public/worker", "public/tesseract"]) {
   rmSync(path, { recursive: true, force: true });
   mkdirSync(path, { recursive: true });
 }
@@ -20,6 +20,26 @@ for (const f of ["index.js", "classes.js", "const.js", "errors.js", "types.js", 
   cpSync(`node_modules/@ffmpeg/ffmpeg/dist/esm/${f}`, `public/ffmpeg/sdk/${f}`);
 }
 cpSync("node_modules/pdfjs-dist/build/pdf.worker.min.mjs", "public/pdf/pdf.worker.min.mjs");
+mkdirSync("public/tesseract/core", { recursive: true });
+cpSync("node_modules/tesseract.js/dist/worker.min.js", "public/tesseract/worker.min.js");
+for (const file of [
+  "tesseract-core.wasm.js",
+  "tesseract-core.wasm",
+  "tesseract-core-simd.wasm.js",
+  "tesseract-core-simd.wasm",
+  "tesseract-core-lstm.wasm.js",
+  "tesseract-core-lstm.wasm",
+  "tesseract-core-simd-lstm.wasm.js",
+  "tesseract-core-simd-lstm.wasm",
+  "tesseract-core-relaxedsimd.js",
+  "tesseract-core-relaxedsimd.wasm.js",
+  "tesseract-core-relaxedsimd.wasm",
+  "tesseract-core-relaxedsimd-lstm.js",
+  "tesseract-core-relaxedsimd-lstm.wasm.js",
+  "tesseract-core-relaxedsimd-lstm.wasm",
+]) {
+  cpSync(`node_modules/tesseract.js-core/${file}`, `public/tesseract/core/${file}`);
+}
 console.log("static assets copied");
 
 // The conversion worker is bundled by bun, not Turbopack (see runner.ts).

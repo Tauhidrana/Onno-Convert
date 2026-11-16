@@ -115,6 +115,19 @@ function imagePair(from: string, to: string, label: string, icon: IconName = "im
 
 export const tools: Tool[] = [
   // Image
+  {
+    id: "image-to-text",
+    from: "image",
+    to: "txt",
+    action: "ocr",
+    category: "image",
+    label: "Image to Text (OCR)",
+    hint: "Bengali and English",
+    icon: "file-text",
+    color: "blue",
+    accept: IMAGE,
+    note: "OCR runs on this device. English and Bengali language data download on first use and are cached by your browser. Scanned PDFs are not supported.",
+  },
   imagePair("png", "jpg", "PNG to JPG"),
   imagePair("jpg", "png", "JPG to PNG"),
   imagePair("png", "webp", "PNG to WebP"),
@@ -662,11 +675,13 @@ const pdfModule = () => import("./pdf");
 const dataModule = () => import("./data");
 const mediaModule = () => import("./media");
 const speechModule = () => import("./speech");
+const ocrModule = () => import("./ocr");
 const ebookModule = () => import("./ebook");
 
 for (const tool of tools) {
   if (tool.server) continue;
-  if (tool.category === "image") tool.load = imageModule;
+  if (tool.id === "image-to-text") tool.load = ocrModule;
+  else if (tool.category === "image") tool.load = imageModule;
   else if (tool.category === "pdf") tool.load = pdfModule;
   else if (tool.category === "data") tool.load = dataModule;
   else if (tool.id === "speech-to-text") tool.load = speechModule;

@@ -57,25 +57,27 @@ async function writeStaticFixtures() {
     const source =
       tool.id === "speech-to-text"
         ? join(fixtureDir, "speech-en.wav")
-        : tool.from === "html"
+        : tool.id === "image-to-text"
           ? null
-          : tool.from === "webp"
+          : tool.from === "html"
             ? null
-            : tool.id === "text-to-pdf"
+            : tool.from === "webp"
               ? null
-              : tool.id === "mp3-to-wav" ||
-                  tool.id === "m4a-to-mp3" ||
-                  tool.id === "ogg-to-mp3" ||
-                  tool.id === "flac-to-mp3" ||
-                  tool.id === "mov-to-mp4" ||
-                  tool.id === "mkv-to-mp4" ||
-                  tool.id === "avi-to-mp4" ||
-                  tool.id === "webm-to-mp4" ||
-                  tool.id === "mp4-to-webm" ||
-                  tool.id === "mp4-to-mp3" ||
-                  tool.id === "compress-video"
+              : tool.id === "text-to-pdf"
                 ? null
-                : join(fixtureDir, `sample.${ext}`);
+                : tool.id === "mp3-to-wav" ||
+                    tool.id === "m4a-to-mp3" ||
+                    tool.id === "ogg-to-mp3" ||
+                    tool.id === "flac-to-mp3" ||
+                    tool.id === "mov-to-mp4" ||
+                    tool.id === "mkv-to-mp4" ||
+                    tool.id === "avi-to-mp4" ||
+                    tool.id === "webm-to-mp4" ||
+                    tool.id === "mp4-to-webm" ||
+                    tool.id === "mp4-to-mp3" ||
+                    tool.id === "compress-video"
+                  ? null
+                  : join(fixtureDir, `sample.${ext}`);
 
     if (source) {
       const destination = join(outputDir, `${tool.id}.${ext}`);
@@ -131,6 +133,28 @@ async function generateWebpFixture(page: Page) {
   const fixture = join(outputDir, "webp-to-jpg.webp");
   await writeFile(fixture, new Uint8Array(bytes));
   await copyFile(fixture, join(outputDir, "webp-to-png.webp"));
+}
+
+async function generateOcrFixture(page: Page) {
+  const svg = Buffer.from(await Bun.file(join(fixtureDir, "ocr-text.svg")).arrayBuffer()).toString("base64");
+  const bytes = await page.evaluate(async (data) => {
+    const image = new Image();
+    image.src = `data:image/svg+xml;base64,${data}`;
+    await image.decode();
+    const canvas = document.createElement("canvas");
+    canvas.width = image.naturalWidth;
+    canvas.height = image.naturalHeight;
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("Canvas is unavailable for OCR fixtures.");
+    context.drawImage(image, 0, 0);
+    const blob = await new Promise<Blob>((resolveBlob, rejectBlob) => {
+      canvas.toBlob((result) => (result ? resolveBlob(result) : rejectBlob(new Error("OCR fixture encoding failed."))), "image/png");
+    });
+    if (blob.type !== "image/png") throw new Error("Chromium cannot create the OCR PNG fixture.");
+    return Array.from(new Uint8Array(await blob.arrayBuffer()));
+  }, svg);
+  const fixture = join(outputDir, "image-to-text.png");
+  await writeFile(fixture, new Uint8Array(bytes));
 }
 
 async function generateMediaFixtures(page: Page) {
@@ -278,6 +302,7 @@ function expectedExtension(tool: Tool): string {
   if (tool.action === "print") return "print";
   if (tool.action === "images" || tool.action === "csv") return "zip";
   if (tool.action === "transcribe") return "txt";
+  if (tool.action === "ocr") return "txt";
   if (tool.action === "image-pdf" || tool.action === "text-pdf" || tool.action === "xlsx-pdf" || tool.action === "epub-pdf") return "pdf";
   if (tool.action === "text" || tool.action === "epub-text") return "txt";
   if (["merge", "split", "rotate", "compress", "reorder"].includes(tool.action)) return "pdf";
@@ -389,6 +414,10 @@ async function validateFile(page: Page, tool: Tool, filename: string, bytes: Uin
     if (tool.id === "speech-to-text") {
       assert(text.toLowerCase().includes("communication channels"), "English speech was not transcribed.");
     }
+    if (tool.id === "image-to-text") {
+      assert(text.includes("Onno Convert OCR"), `English image text was not recognized: ${text}`);
+      assert(text.includes("বাংলা"), `Bengali image text was not recognized: ${text}`);
+    }
   } else if (ext === "wav") {
     const data = Buffer.from(bytes);
     assert(data.toString("ascii", 0, 4) === "RIFF" && data.toString("ascii", 8, 12) === "WAVE", "Invalid WAV signature.");
@@ -460,7 +489,7 @@ async function testTool(page: Page, tool: Tool) {
   }
 
   const ext = tool.from === "image" ? "jpg" : tool.from === "audio" ? "wav" : tool.from === "video" ? "mp4" : tool.from;
-  const input = join(outputDir, `${tool.id}.${ext}`);
+  const input = tool.id === "image-to-text" ? join(outputDir, "image-to-text.png") : join(outputDir, `${tool.id}.${ext}`);
   const inputs = [input];
   if (tool.id === "image-to-pdf") inputs.push(join(outputDir, "image-to-pdf-second.png"));
   if (tool.id === "merge-pdf") inputs.push(join(outputDir, "merge-pdf-second.pdf"));
@@ -683,6 +712,7 @@ async function main() {
 
     const generator = await browser.newPage();
     await generator.goto(baseUrl);
+    await generateOcrFixture(generator);
     await generateWebpFixture(generator);
     await generateMediaFixtures(generator);
     await generator.close();

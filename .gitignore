@@ -11,3 +11,4 @@ graphify-out/graph.html
 public/worker
 public/ffmpeg
 public/pdf
+public/tesseract

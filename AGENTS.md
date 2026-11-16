@@ -1,7 +1,7 @@
 # AGENTS.md — Onno Convert
 
 Personal, browser-only file converter. "Convert anything. Privately. By OnnoPoth."
-Owner: single user. No auth, payments, ads, analytics, or server calls in Phase 1-2.
+Owner: single user. No auth, payments, ads, analytics, server-side conversion, or file uploads in Phase 1-2. Model assets may download into the browser cache on first use.
 
 ## Working rules (ponytail, level: full)
 
@@ -70,8 +70,7 @@ bun run test         # production build + Chromium converter e2e
 
 ## Current phase
 
-Phase 1 (client-only). Phase 2 voice/OCR and Phase 3 server tools are not built yet;
-Phase 3 tools are marked "Server" and return a clear message.
+Phase 1 is complete. Phase 2 speech-to-text and image OCR are client-side; voice recording remains. Phase 3 tools are not built and are marked "Server" with a clear message.
 
 <!-- BEGIN:nextjs-agent-rules -->
 
