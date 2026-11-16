@@ -457,10 +457,22 @@ export const tools: Tool[] = [
         key: "language",
         label: "Language",
         type: "select",
-        default: "english",
+        default: "auto",
         options: [
-          { value: "english", label: "English" },
-          { value: "bengali", label: "Bengali" },
+          { value: "bn", label: "Bangla" },
+          { value: "en", label: "English" },
+          { value: "auto", label: "Auto" },
+        ],
+      },
+      {
+        key: "modelSize",
+        label: "Model size",
+        type: "select",
+        default: "base",
+        options: [
+          { value: "tiny", label: "Tiny" },
+          { value: "base", label: "Base" },
+          { value: "small", label: "Small" },
         ],
       },
       {
@@ -474,7 +486,7 @@ export const tools: Tool[] = [
         ],
       },
     ],
-    note: "The multilingual Whisper model downloads about 70 MB on first use and is cached by your browser. Bengali may be romanized instead of written in Bengali script.",
+    note: "Approximate first download: Tiny 44 MB (fastest, least accurate), Base 80 MB (balanced), Small 252 MB (slowest, most accurate of these; may use substantial memory). Models are browser-cached. Auto detects Bangla or English; short or unclear clips may be misidentified. Bangla transcription can be inaccurate or appear in another script; verify the transcript before relying on it.",
   },
   {
     id: "mp3-to-wav",

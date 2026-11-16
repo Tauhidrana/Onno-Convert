@@ -2,13 +2,26 @@ import { outputName } from "@/lib/utils";
 import type { AutomaticSpeechRecognitionPipeline } from "@huggingface/transformers";
 import type { ConverterModule } from "./types";
 
-const MODEL = "onnx-community/whisper-base";
-let transcriberPromise: Promise<AutomaticSpeechRecognitionPipeline> | null = null;
+type ModelSize = "tiny" | "base" | "small";
+type Language = "en" | "bn";
+type GeneratedTensor = { tolist: () => unknown };
 
-function getTranscriber(onProgress: (progress: number) => void) {
-  transcriberPromise ??= (async () => {
+let transcriberPromise: Promise<AutomaticSpeechRecognitionPipeline> | null = null;
+let currentModelSize: ModelSize | null = null;
+
+function isGeneratedTensor(value: unknown): value is GeneratedTensor {
+  return typeof value === "object" && value !== null && "tolist" in value && typeof value.tolist === "function";
+}
+
+function getTranscriber(size: ModelSize, onProgress: (progress: number) => void) {
+  if (currentModelSize === size && transcriberPromise) return transcriberPromise;
+
+  const previous = transcriberPromise;
+  currentModelSize = size;
+  transcriberPromise = (async () => {
+    if (previous) await (await previous).dispose();
     const { pipeline } = await import("@huggingface/transformers");
-    return pipeline("automatic-speech-recognition", MODEL, {
+    return pipeline("automatic-speech-recognition", `onnx-community/whisper-${size}`, {
       dtype: "q8",
       progress_callback: (info) => {
         if (info.status === "progress_total") {
@@ -17,10 +30,47 @@ function getTranscriber(onProgress: (progress: number) => void) {
       },
     });
   })().catch((error: unknown) => {
-    transcriberPromise = null;
+    if (currentModelSize === size) {
+      currentModelSize = null;
+      transcriberPromise = null;
+    }
     throw error;
   });
   return transcriberPromise;
+}
+
+async function detectLanguage(
+  transcriber: AutomaticSpeechRecognitionPipeline,
+  audio: Float32Array,
+): Promise<Language> {
+  const inputs = await transcriber.processor(audio);
+  const startToken = transcriber.model.generation_config?.decoder_start_token_id;
+  if (startToken === null || startToken === undefined) {
+    throw new Error("Whisper language detection is unavailable for this model.");
+  }
+
+  const generated = await transcriber.model.generate({
+    inputs: inputs.input_features,
+    decoder_input_ids: [startToken],
+    max_new_tokens: 1,
+  });
+  const sequences =
+    isGeneratedTensor(generated)
+      ? generated
+      : typeof generated === "object" && generated !== null && "sequences" in generated
+        ? generated.sequences
+        : null;
+  if (!isGeneratedTensor(sequences)) throw new Error("Whisper language detection returned no tokens.");
+  const rows = sequences.tolist();
+  if (!Array.isArray(rows) || !Array.isArray(rows[0]) || rows[0].length < 2) {
+    throw new Error("Whisper language detection returned an invalid token sequence.");
+  }
+  const tokenId = Number(rows[0][1]);
+  if (!Number.isSafeInteger(tokenId)) throw new Error("Whisper language detection returned an invalid token ID.");
+  const firstToken = transcriber.tokenizer.decode([tokenId], { skip_special_tokens: false });
+  const detected = firstToken.match(/^<\|([a-z]{2,3})\|>$/)?.[1];
+  if (detected === "en" || detected === "bn") return detected;
+  throw new Error("Auto detected a language other than Bangla or English. Choose a language manually.");
 }
 
 function srtTime(seconds: number) {
@@ -37,8 +87,14 @@ export const convert: ConverterModule["convert"] = async (files, opts, onProgres
   if (!file) throw new Error("Choose an audio file to transcribe.");
 
   const format = opts.format === "srt" ? "srt" : "txt";
-  const language = opts.language === "english" || opts.language === "bengali" ? opts.language : undefined;
-  if (!language) throw new Error("Choose English or Bengali for this recording.");
+  const languageOption = opts.language;
+  if (languageOption !== "en" && languageOption !== "bn" && languageOption !== "auto") {
+    throw new Error("Choose Bangla, English, or Auto for this recording.");
+  }
+  const modelSize = opts.modelSize;
+  if (modelSize !== "tiny" && modelSize !== "base" && modelSize !== "small") {
+    throw new Error("Choose a Whisper model size.");
+  }
   const audioUrl = URL.createObjectURL(file);
   try {
     const { load_audio } = await import("@huggingface/transformers");
@@ -46,8 +102,11 @@ export const convert: ConverterModule["convert"] = async (files, opts, onProgres
     const audio = await load_audio(audioUrl, 16_000);
     if (!audio.length) throw new Error("The audio file is empty or could not be decoded.");
 
-    const transcriber = await getTranscriber(onProgress);
+    const transcriber = await getTranscriber(modelSize, onProgress);
     onProgress(0.5);
+    const language =
+      languageOption === "auto" ? await detectLanguage(transcriber, audio) : languageOption;
+    onProgress(0.58);
     const result = await transcriber(audio, {
       task: "transcribe",
       language,

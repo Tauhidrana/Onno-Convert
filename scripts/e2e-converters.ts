@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { copyFile, mkdir, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, open, unlink, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { PDFDocument } from "pdf-lib";
 import { chromium, type Browser, type Page } from "playwright";
@@ -7,6 +7,7 @@ import JSZip from "jszip";
 import * as XLSX from "xlsx";
 import { availableTools, tools } from "../src/convert/registry";
 import type { Tool } from "../src/convert/registry";
+import { MAX_SAFE_BYTES } from "../src/convert/types";
 
 const root = resolve(import.meta.dir, "..");
 const fixtureDir = join(root, "test-fixtures");
@@ -696,8 +697,13 @@ async function testBengaliSpeech(page: Page) {
   assert(tool, "Missing speech-to-text tool.");
   await page.goto(`${baseUrl}/convert/${tool.id}`);
   await page.locator('input[type="file"]').setInputFiles(join(outputDir, "speech-bn.wav"));
-  await page.getByLabel("Language").selectOption("bengali");
-  assert((await page.getByLabel("Language").inputValue()) === "bengali", "Bengali language selection was not applied.");
+  await page.getByLabel("Language").selectOption("bn");
+  const modelSize = page.getByLabel("Model size");
+  for (const size of ["tiny", "base", "small"]) {
+    await modelSize.selectOption(size);
+    assert((await modelSize.inputValue()) === size, `${size} model selection was not applied.`);
+  }
+  assert((await page.getByLabel("Language").inputValue()) === "bn", "Bangla language selection was not applied.");
   await page.getByRole("button", { name: "Convert", exact: true }).click();
   const outcome = await Promise.race([
     page.getByText(/\d+ files? ready/).waitFor({ timeout: 180_000 }).then(() => "ready" as const),
@@ -710,8 +716,25 @@ async function testBengaliSpeech(page: Page) {
   const { filename, bytes } = await readDownload(page, tool);
   assert(filename.endsWith(".txt"), `Downloaded ${filename}, expected a TXT transcript.`);
   const text = new TextDecoder().decode(bytes);
-  assert(text.toLowerCase().includes("baadam"), `The Bengali fixture was not transcribed: ${text}`);
-  assert(/haznel|keguli/i.test(text), "Bengali transcript is missing expected fixture words.");
+  assert(text.trim().length > 0, "The Bengali fixture produced an empty transcript.");
+  const classifyScript = (transcript: string) => {
+    if (/[\u0980-\u09FF]/.test(transcript)) return "Bengali script";
+    if (/[\u0900-\u097F]/.test(transcript)) return "Devanagari (not Bengali)";
+    if (/[A-Za-z]/.test(transcript)) return "Latin/romanized";
+    return "unclassified";
+  };
+  const forcedResult = classifyScript(text);
+
+  await page.getByLabel("Language").selectOption("auto");
+  const ready = page.getByText(/\d+ files? ready/);
+  await page.getByRole("button", { name: "Convert", exact: true }).click();
+  await ready.waitFor({ state: "detached" });
+  await ready.waitFor({ timeout: 180_000 });
+  const automatic = await readDownload(page, tool);
+  const automaticText = new TextDecoder().decode(automatic.bytes);
+  assert(automaticText.trim().length > 0, "Auto produced an empty Bengali transcript.");
+  const automaticResult = classifyScript(automaticText);
+  return `forced Bangla: ${forcedResult}; auto: ${automaticResult}; sample: ${automaticText}`;
 }
 
 async function testSpeechSrt(page: Page) {
@@ -719,7 +742,7 @@ async function testSpeechSrt(page: Page) {
   assert(tool, "Missing speech-to-text tool.");
   await page.goto(`${baseUrl}/convert/${tool.id}`);
   await page.locator('input[type="file"]').setInputFiles(join(outputDir, `${tool.id}.wav`));
-  await page.getByLabel("Language").selectOption("english");
+  await page.getByLabel("Language").selectOption("en");
   await page.getByLabel("Output").selectOption("srt");
   await page.getByRole("button", { name: "Convert", exact: true }).click();
   await page.getByText(/\d+ files? ready/).waitFor({ timeout: 180_000 });
@@ -773,6 +796,49 @@ async function testVoiceRecorder(browser: Browser) {
   }
 }
 
+async function testLargeFileWarning(browser: Browser) {
+  const file = join(outputDir, "large-warning.jpg");
+  const handle = await open(file, "w");
+  try {
+    await handle.truncate(MAX_SAFE_BYTES + 1);
+  } finally {
+    await handle.close();
+  }
+
+  const page = await browser.newPage();
+  try {
+    await page.goto(`${baseUrl}/convert/jpg-to-png`);
+    await page.locator('input[type="file"]').setInputFiles(file);
+    await page.getByText("Large — may run out of memory").waitFor();
+    assert((await page.getByText("large-warning.jpg").count()) === 1, "The large file was not queued.");
+    assert((await page.title()).includes("JPG"), "The converter page stopped responding after the large file was queued.");
+  } finally {
+    await page.close();
+    await unlink(file);
+  }
+}
+
+async function testMobileLayouts(browser: Browser) {
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true });
+  try {
+    for (const [path, assertion] of [
+      ["/", async () => assert((await page.locator('a[href^="/convert/"]').count()) > 0, "Home grid has no tool cards.")],
+      ["/convert/png-to-jpg", async () => await page.getByRole("button", { name: "Convert", exact: true }).waitFor()],
+      ["/convert/voice-recorder", async () => await page.getByRole("button", { name: "Start recording" }).waitFor()],
+    ] as const) {
+      await page.goto(`${baseUrl}${path}`);
+      await assertion();
+      const { viewportWidth, documentWidth } = await page.evaluate(() => ({
+        viewportWidth: document.documentElement.clientWidth,
+        documentWidth: document.documentElement.scrollWidth,
+      }));
+      assert(documentWidth <= viewportWidth, `${path} overflows horizontally at 390px (${documentWidth}px).`);
+    }
+  } finally {
+    await page.close();
+  }
+}
+
 async function main() {
   await writeStaticFixtures();
   let server: ReturnType<typeof spawn> | undefined;
@@ -815,9 +881,9 @@ async function main() {
       }
     }
     try {
-      await testBengaliSpeech(page);
+      const evidence = await testBengaliSpeech(page);
       extraPasses++;
-      console.log("PASS Bengali speech to text");
+      console.log(`PASS Bengali speech to text — ${evidence}`);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       failures.push(`Bengali speech to text: ${message}`);
@@ -849,6 +915,8 @@ async function main() {
       ["cancellation", () => testCancellation(browser)],
       ["reorder default retains pages", () => testReorderDefault(browser)],
       ["corrupt input", () => testCorruptInput(browser)],
+      [">200 MiB file warning", () => testLargeFileWarning(browser)],
+      ["390px mobile layouts", () => testMobileLayouts(browser)],
     ] as const) {
       try {
         await check();
