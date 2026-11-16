@@ -48,8 +48,17 @@ Quality:
 - [ ] PDF→DOCX/XLSX/PPTX, Office→PDF, DWG, DjVu, MOBI
 - [ ] marked "Server" in UI; proposal with cost/tradeoffs first
 
+## Phase 4 — ship & polish
+- [x] Apply supplied logo variants in the header; replace favicon and add Apple/PWA icons plus Open Graph metadata/image
+- [ ] Remove generated public assets from Git; add linting and README; verify clean install/build
+- [ ] Hide planned Phase 3 tools from discovery and sitemap; show "Not available yet" on direct routes
+- [ ] Add Bangla/English/Auto and tiny/base/small Whisper choices; verify Bengali script output honestly
+- [ ] Exercise the >200 MiB warning and 390px layouts; rerun Lighthouse and project checks
+
 ## Verification status
 `bun run test` builds production assets and passed 64 Chromium 159 checks: all 57 registry entries (49 live, 8 server UI routes), OCR of English and Bengali image text, English TXT/SRT and Bengali TXT speech transcription, and voice recording to MP3/WAV, plus image quality, PDF image JPG/WebP output, cancellation, reorder-default retention, and corrupt-PDF handling. Outputs were downloaded and validated with signatures, dimensions, EXIF removal, PDF page counts/rotation/order, workbook/CSV content, media duration, real FLEURS speech content, and OCR text from a PNG fixture. Voice recording used Chromium's fake microphone device. HTML-to-PDF's print call was intercepted; its print preview blocks uploaded scripts and has no downloadable blob.
+
+Phase 4 branding milestone: `bun run build` and `bun run typecheck` pass. Header variants were visually checked in both themes; favicon, Apple/PWA icons, manifest, and Open Graph assets are wired to the supplied logos.
 
 | Tool | Status |
 |---|---|
@@ -127,9 +136,11 @@ Phase 2 is complete. Phase 3 server tools remain unbuilt pending approval.
 - Voice recording uses `MediaRecorder` and requires a secure origin plus microphone permission. MP3/WAV output was tested with Chromium's fake microphone, not physical devices or Safari; FFmpeg re-encodes locally.
 
 ## Next step
-Prepare the Phase 3 proposal and Vercel deployment steps; do not build server tools without approval.
+Continue Phase 4 with repository hygiene, linting, and README; do not build Phase 3 server tools.
 
 ## Handoff notes
+- Phase 4 branding is implemented but not committed yet. Supplied SVGs are in `public/`; generated `apple-touch-icon.png`, `pwa-192.png`, `pwa-512.png`, and `opengraph-image.png` are static assets. Branding build and typecheck pass.
+- The previous Lighthouse result (13.6.0, 100 on mobile and desktop) predates Phase 4 and must be rerun before final reporting.
 - `bun run test` passes: production build plus 64 Chromium checks; standalone `bun run typecheck` passed.
 - Lighthouse 13.6.0 reports 100 mobile and desktop for performance, accessibility, best practices, and SEO.
 - Clean generated public assets total about 85 MiB (Tesseract core 43 MiB, FFmpeg 31 MiB, worker 10 MiB, PDF worker 1 MiB); no conflict-suffixed duplicates remain.
