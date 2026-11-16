@@ -1,0 +1,8 @@
+node_modules
+.next
+out
+.vercel
+*.tsbuildinfo
+.DS_Store
+test-fixtures/out
+graphify-out/graph.html

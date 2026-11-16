@@ -1,0 +1,53 @@
+import {
+  ArrowUpDown,
+  BookOpen,
+  FileCode2,
+  FileImage,
+  FileSpreadsheet,
+  FileText,
+  FileType2,
+  Images,
+  Image as ImageIcon,
+  Merge,
+  Mic,
+  Music,
+  Presentation,
+  Printer,
+  RotateCw,
+  Scissors,
+  Server,
+  Shrink,
+  Split,
+  Table2,
+  Video,
+} from "lucide-react";
+import type { IconName } from "@/convert/registry";
+
+const map = {
+  image: ImageIcon,
+  images: Images,
+  "file-image": FileImage,
+  "file-text": FileText,
+  "file-type": FileType2,
+  "file-code": FileCode2,
+  "file-spreadsheet": FileSpreadsheet,
+  table: Table2,
+  music: Music,
+  video: Video,
+  book: BookOpen,
+  merge: Merge,
+  split: Split,
+  rotate: RotateCw,
+  shrink: Shrink,
+  reorder: ArrowUpDown,
+  printer: Printer,
+  server: Server,
+  presentation: Presentation,
+  mic: Mic,
+  scissors: Scissors,
+} satisfies Record<IconName, typeof ImageIcon>;
+
+export function ToolIcon({ name, className = "h-5 w-5" }: { name: IconName; className?: string }) {
+  const Icon = map[name] ?? FileText;
+  return <Icon className={className} aria-hidden="true" />;
+}
