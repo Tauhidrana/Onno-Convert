@@ -58,3 +58,15 @@ if (!result.success) {
 }
 cpSync("node_modules/@jsquash/avif/codec/enc/avif_enc.wasm", "public/worker/avif_enc.wasm");
 console.log("conversion worker built");
+
+const denoiseWorker = await Bun.build({
+  entrypoints: ["src/workspace/rnnoise-worker.ts"],
+  outdir: "public/workspace",
+  format: "esm",
+  target: "browser",
+});
+if (!denoiseWorker.success) {
+  for (const log of denoiseWorker.logs) console.error(log);
+  process.exit(1);
+}
+console.log("RNNoise worker built");

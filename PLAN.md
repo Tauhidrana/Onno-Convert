@@ -155,8 +155,9 @@ Phase 2 implementation is present; Bengali speech-to-text remains unreliable. Ph
 - [x] Sign PDF (draw/type/upload signatures, localStorage saves, date/name stamps, visual-signature disclaimer)
 - [x] Form Builder + Fill Form (AcroForm fields read back with pdf-lib, flatten)
 - [x] Request Signatures (1–5 colour-coded signers, placeholder fields, no-server disclaimer) + Share PDF (Web Share detection, mailto, copy filename)
-- [ ] Voice Noise Cleaner (fast + RNNoise WASM), objective noise-floor test
-- [ ] README update, Lighthouse, push + redeploy, final report
+- [x] Voice Noise Cleaner (fast ffmpeg filters + RNNoise WASM in a Worker), objective noise-floor test with real noisy fixture
+- [x] README update
+- [ ] Lighthouse, push + redeploy, final report
 
 ## Next step
 Review the final diff and commit the Phase 4 Whisper/practical-check milestone. Do not build Phase 3 server tools.

@@ -5,6 +5,7 @@ import { ArrowLeft } from "lucide-react";
 import { categoryMeta, toolById, tools } from "@/convert/registry";
 import { ToolClient } from "@/components/tool-client";
 import { WorkspaceClient } from "@/components/workspace-client";
+import { VoiceCleanerClient } from "@/components/voice-cleaner-client";
 import { ToolIcon } from "@/components/tool-icon";
 import { tileColor } from "@/components/colors";
 
@@ -61,7 +62,7 @@ export default async function ToolPage({ params }: { params: Promise<{ slug: str
             </p>
           </div>
         ) : (
-          tool.kind === "workspace" ? <WorkspaceClient toolId={tool.id} /> : <ToolClient toolId={tool.id} />
+          tool.kind === "workspace" ? <WorkspaceClient toolId={tool.id} /> : tool.id === "voice-cleaner" ? <VoiceCleanerClient toolId={tool.id} /> : <ToolClient toolId={tool.id} />
         )}
       </div>
 

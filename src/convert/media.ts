@@ -101,6 +101,27 @@ export const convert: ConverterModule["convert"] = async (files, opts, onProgres
   }
 };
 
+/** Generic ffmpeg runner for tools that build their own filter graph (voice cleaner). */
+export async function runFfmpeg(file: File, inputExt: string, args: string[], target: string, onProgress: (progress: number) => void) {
+  const { fetchFile } = await import("@ffmpeg/util");
+  const ffmpeg = await getEngine(onProgress);
+  const input = `input.${inputExt}`;
+  const output = `output.${target}`;
+  progressHandler = onProgress;
+  try {
+    onProgress(0.05);
+    await ffmpeg.writeFile(input, await fetchFile(file));
+    await ffmpeg.exec(["-y", "-i", input, ...args, output]);
+    const data = (await ffmpeg.readFile(output)) as Uint8Array;
+    if (!data?.length) throw new Error("The engine produced an empty file. The input may be corrupt or unsupported.");
+    onProgress(1);
+    return data;
+  } finally {
+    progressHandler = null;
+    try { await ffmpeg.deleteFile(input); await ffmpeg.deleteFile(output); } catch { /* already gone */ }
+  }
+}
+
 export async function cancel() {
   if (engine) {
     engine.terminate();

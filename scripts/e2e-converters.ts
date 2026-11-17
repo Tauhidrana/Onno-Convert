@@ -48,6 +48,47 @@ async function waitForServer(server: ReturnType<typeof spawn>) {
   throw new Error(`Next.js did not become ready at ${baseUrl}. Run bun run build first.`);
 }
 
+function noiseWavFixture() {
+  const rate = 48000;
+  const seconds = 2;
+  const pcm = Buffer.alloc(rate * seconds * 2);
+  let seed = 12345;
+  for (let i = 0; i < rate * seconds; i++) {
+    const t = i / rate;
+    const noise = ((seed = (seed * 1664525 + 1013904223) >>> 0) / 0xffffffff - 0.5) * 2 * 0.08;
+    const value = t < 0.8 ? Math.sin(2 * Math.PI * 440 * t) * 0.35 : noise;
+    pcm.writeInt16LE(Math.round(Math.max(-1, Math.min(1, value)) * 32767), i * 2);
+  }
+  const header = Buffer.alloc(44);
+  header.write("RIFF", 0);
+  header.writeUInt32LE(36 + pcm.length, 4);
+  header.write("WAVEfmt ", 8);
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20);
+  header.writeUInt16LE(1, 22);
+  header.writeUInt32LE(rate, 24);
+  header.writeUInt32LE(rate * 2, 28);
+  header.writeUInt16LE(2, 32);
+  header.writeUInt16LE(16, 34);
+  header.write("data", 36);
+  header.writeUInt32LE(pcm.length, 40);
+  return Buffer.concat([header, pcm]);
+}
+
+function wavRate(bytes: Uint8Array) {
+  return Buffer.from(bytes).readUInt32LE(24);
+}
+
+function wavRms(bytes: Uint8Array, from: number, to: number) {
+  const buffer = Buffer.from(bytes);
+  const rate = wavRate(bytes);
+  const start = Math.max(0, Math.floor(from * rate));
+  const end = Math.min((buffer.length - 44) / 2, Math.floor(to * rate));
+  let sum = 0;
+  for (let i = start; i < end; i++) sum += (buffer.readInt16LE(44 + i * 2) / 32768) ** 2;
+  return Math.sqrt(sum / Math.max(1, end - start));
+}
+
 async function writeStaticFixtures() {
   await mkdir(outputDir, { recursive: true });
 
@@ -57,7 +98,9 @@ async function writeStaticFixtures() {
     if (tool.from === "video") ext = "mp4";
 
     const source =
-      tool.id === "speech-to-text"
+      tool.id === "voice-cleaner"
+        ? null
+        : tool.id === "speech-to-text"
         ? join(fixtureDir, "speech-en.wav")
         : tool.id === "voice-recorder"
           ? null
@@ -114,6 +157,7 @@ async function writeStaticFixtures() {
     page.drawText(`Page ${index + 1}`);
   }
   await writeFile(join(outputDir, "reorder-pdf.pdf"), await reorderPdf.save());
+  await writeFile(join(outputDir, "voice-cleaner.wav"), noiseWavFixture());
 }
 
 async function generateWebpFixture(page: Page) {
@@ -1025,6 +1069,41 @@ async function testWorkspaceMobile(browser: Browser) {
   }
 }
 
+async function testVoiceCleaner(browser: Browser) {
+  const original = new Uint8Array(await Bun.file(join(outputDir, "voice-cleaner.wav")).arrayBuffer());
+  const before = wavRms(original, 1, 1.8);
+  const results: string[] = [];
+  for (const engine of ["fast", "ai"]) {
+    const page = await browser.newPage();
+    try {
+      await page.goto(`${baseUrl}/convert/voice-cleaner`);
+      await page.waitForTimeout(400);
+      await page.locator('input[type="file"]').setInputFiles(join(outputDir, "voice-cleaner.wav"));
+      await page.getByLabel("Engine").selectOption(engine);
+      await page.locator("#strength").focus();
+      await page.keyboard.press("End");
+      await page.getByRole("button", { name: "Clean audio" }).click();
+      await page.getByText(/\.converted\.wav is ready/).waitFor({ timeout: 180_000 });
+      const event = page.waitForEvent("download");
+      await page.getByRole("button", { name: "Download", exact: true }).click();
+      const download = await event;
+      const stream = await download.createReadStream();
+      const chunks: Buffer[] = [];
+      for await (const chunk of stream) chunks.push(Buffer.from(chunk));
+      const cleaned = new Uint8Array(Buffer.concat(chunks));
+      const after = wavRms(cleaned, 1, 1.8);
+      const dropDb = 20 * Math.log10(before / Math.max(after, 1e-6));
+      assert(dropDb >= 3, `${engine} engine reduced the noise floor by only ${dropDb.toFixed(1)} dB.`);
+      const seconds = (cleaned.length - 44) / 2 / wavRate(cleaned);
+      assert(Math.abs(seconds - 2) < 0.05, `${engine} output duration was ${seconds.toFixed(2)}s, expected 2s.`);
+      results.push(`${engine}: -${dropDb.toFixed(1)} dB`);
+    } finally {
+      await page.close();
+    }
+  }
+  return results.join(", ");
+}
+
 async function main() {
   await writeStaticFixtures();
   let server: ReturnType<typeof spawn> | undefined;
@@ -1109,6 +1188,7 @@ async function main() {
       ["form builder + fill form", () => testFormTools(browser)],
       ["request signatures + share", () => testRequestAndShare(browser)],
       ["390px workspace layouts", () => testWorkspaceMobile(browser)],
+      ["voice cleaner fast + AI noise floor", () => testVoiceCleaner(browser)],
     ] as const) {
       if (filter && !name.includes(filter)) continue;
       try {
