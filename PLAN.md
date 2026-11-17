@@ -144,7 +144,9 @@ Phase 2 implementation is present; Bengali speech-to-text remains unreliable. Ph
 - [x] Audit: 54 Playwright screenshots (`design-audit/before/`), critique and short plan in `DESIGN.md`
 - [x] Milestone 1: design tokens (light/dark), Inter + Noto Sans Bengali fonts, UI kit, home redesign, command palette
 - [x] Milestone 2: four-state tool flow with sticky action bar, real progress, retryable errors, next-tool shortcuts
-- [ ] Milestone 3: special-tool UX, global polish, after screenshots + Lighthouse + final report
+- [x] Milestone 3: special-tool UX (recorder timer/level/playback, page thumbnails, text/media previews, stage labels), global polish
+- [x] After screenshots (`design-audit/after/`), one refinement round, Lighthouse mobile + desktop 100/100/100/100
+- [ ] Push + Vercel redeploy (needs credentials/remote)
 
 ## Next step
 Review the final diff and commit the Phase 4 Whisper/practical-check milestone. Do not build Phase 3 server tools.

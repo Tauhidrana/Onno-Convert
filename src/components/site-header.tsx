@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { LayoutGrid } from "lucide-react";
 import { Logo } from "@/components/brand";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { CommandPalette } from "@/components/command-palette";
@@ -13,9 +14,11 @@ export function SiteHeader() {
         <nav className="flex items-center gap-1.5">
           <Link
             href="/#tools"
-            className="rounded-lg px-3 py-2 text-sm text-black/60 transition hover:bg-black/5 hover:text-black dark:text-white/60 dark:hover:bg-white/10 dark:hover:text-white"
+            aria-label="All tools"
+            className="flex min-h-11 items-center gap-1 rounded-lg px-2 text-sm text-muted transition hover:bg-surface-2 hover:text-ink"
           >
-            All tools
+            <LayoutGrid className="h-5 w-5 sm:hidden" aria-hidden="true" />
+            <span className="hidden sm:inline">All tools</span>
           </Link>
           <CommandPalette />
           <ThemeToggle />

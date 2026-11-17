@@ -29,4 +29,19 @@ The floating "N" badge is the Next dev indicator, not product UI.
 4. Special tools: recorder timer/level/playback; OCR/speech selector hints and model progress; PDF/image visual order controls where they already exist.
 5. Global: sticky compact header with search, focus rings, 44px targets, reduced motion, metadata/PWA already present; verify with the same screenshots, tests, Lighthouse.
 
-No new heavy dependencies. No converter internals change. kept the existing registry and runners intact.
+No new heavy dependencies. No converter internals changed; the existing registry and runners stay intact.
+
+## After (round 1 + one refinement)
+54 matching screenshots: `design-audit/after/<light|dark>-<390|768|1440>-<state>.png`.
+
+What improved: the primary action is now always visible (sticky bottom bar on mobile, fixed sidebar on desktop); done states show the size delta, download, "convert another", a next-tool link and editable/copyable text or media preview; failures get a prominent card with a fix and retry; the home has a hero search, category chips, format badges, favorites/recents and a plain-language privacy strip; the recorder has a timer, level meter and playback; PDF reorder/rotate/split show page thumbnails and the merge queue shows its order visually.
+
+Refinement fixes after reviewing the first "after" set: friendly format labels for MIME-only accept lists (OCR/speech no longer show raw MIME strings), queued files read "Ready" instead of "Working", dropzone hierarchy (instruction before the choose button), shorter mobile search placeholder, and a non-wrapping before/after size line.
+
+Remaining issues reviewed and accepted:
+- The 49-card grid still repeats the same few icons; pastel tiles, badges and favorites keep it scannable, but per-tool artwork would be the next visual upgrade.
+- OCR/speech model notes remain paragraph-length on desktop (all limits are visible by design).
+- Options stay inline on mobile rather than in a bottom sheet; the sticky action bar removes the original "can't find Convert" failure.
+- Bangla/English UI language toggle was skipped: the product copy is short and the Bengali font is already applied to user content.
+
+Verified: 67/67 Chromium checks (`bun run test`), typecheck, lint, and Lighthouse 100/100/100/100 (performance, accessibility, best practices, SEO) for both mobile and desktop.

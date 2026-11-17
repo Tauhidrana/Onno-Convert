@@ -146,6 +146,7 @@ export function FileRow({
   progress,
   status,
   error,
+  stageLabel,
   canReorder,
   isFirst,
   isLast,
@@ -156,6 +157,7 @@ export function FileRow({
   progress: number;
   status: "queued" | "running" | "done" | "error";
   error?: string;
+  stageLabel?: string;
   canReorder?: boolean;
   isFirst?: boolean;
   isLast?: boolean;
@@ -174,7 +176,7 @@ export function FileRow({
     return () => { alive = false; };
   }, [file]);
 
-  const stage = status === "done" ? "Done" : status === "error" ? "Failed" : status === "running" ? "Converting" : "Ready";
+  const stage = stageLabel ?? (status === "done" ? "Done" : status === "error" ? "Failed" : status === "running" ? "Converting" : "Ready");
   return (
     <li className="flex items-center gap-3 px-4 py-3">
       <span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-surface-2 text-xs font-semibold text-muted">
@@ -188,7 +190,7 @@ export function FileRow({
             <span className="ml-2 font-medium text-warning">Large — may run out of memory</span>
           )}
         </p>
-        {status === "running" || (progress > 0 && status !== "done") ? <ProgressBar value={progress} /> : null}
+        {status === "running" || (progress > 0 && status !== "done") ? <ProgressBar value={progress} stage={status === "running" ? stage : undefined} /> : null}
         {error && <p className="mt-1 text-xs text-danger" role="alert">{error}</p>}
       </div>
       <div className="flex shrink-0 items-center gap-1">

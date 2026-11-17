@@ -125,7 +125,7 @@ export function ToolExplorer() {
               type="search"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search tools or formats — try jpg, pdf, mp3…"
+              placeholder="Search tools or formats…"
               aria-label="Search tools"
               className="h-14 w-full rounded-2xl border border-line bg-surface pl-12 pr-16 text-base shadow-md outline-none transition placeholder:text-subtle focus:border-brand"
             />

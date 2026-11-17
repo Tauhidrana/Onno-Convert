@@ -18,6 +18,7 @@ import { type ConvertOptions, type Field, type OutputFile } from "@/convert/type
 import { baseName, cn, formatBytes } from "@/lib/utils";
 import { saveBlob, saveZip } from "@/lib/download";
 import { VoiceRecorder } from "@/components/voice-recorder";
+import { PdfPageGrid } from "@/components/pdf-page-grid";
 import { Button, Card, Dropzone, FileRow, Toast } from "@/components/ui";
 import { ToolIcon } from "@/components/tool-icon";
 
@@ -47,6 +48,20 @@ function remembered(toolId: string, fields: Field[]): ConvertOptions {
     // Private mode or disabled storage: defaults still work.
   }
   return base;
+}
+
+function stageFor(toolId: string, progress: number, status: Status): string {
+  if (status === "queued") return "Ready";
+  if (status === "done") return "Done";
+  if (status === "error") return "Failed";
+  if (toolId === "speech-to-text") {
+    if (progress < 0.45) return "Downloading model";
+    if (progress < 0.58) return "Preparing";
+    return "Transcribing";
+  }
+  if (toolId === "image-to-text") return "Reading image";
+  if (toolId === "voice-recorder") return "Encoding audio";
+  return progress > 0 ? "Converting" : "Working";
 }
 
 function nextToolId(toolId: string): string {
@@ -256,12 +271,12 @@ export function ToolClient({ toolId }: { toolId: string }) {
               <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-soft text-[var(--accent-text)]">
                 <Upload className="h-6 w-6" aria-hidden="true" />
               </span>
-              <span className="pointer-events-none mt-4 inline-flex min-h-11 items-center rounded-xl bg-brand px-4 text-sm font-semibold text-[var(--accent-contrast)]">
-                Choose {tool.multiple ? "files" : "a file"}
-              </span>
-              <p className="mt-3 text-sm font-medium">
+              <p className="mt-4 text-sm font-medium">
                 Drag {tool.multiple ? "files" : "a file"} here, browse, or paste
               </p>
+              <span className="pointer-events-none mt-1 inline-flex min-h-11 items-center rounded-xl bg-brand px-4 text-sm font-semibold text-[var(--accent-contrast)]">
+                Choose {tool.multiple ? "files" : "a file"}
+              </span>
               <p className="mt-1 max-w-sm text-xs text-muted">
                 {formatAccept(tool.accept)} · up to 200 MB suggested. Files stay on this device.
               </p>
@@ -293,7 +308,12 @@ export function ToolClient({ toolId }: { toolId: string }) {
           {items.length > 0 && (
             <Card className="overflow-hidden">
               <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3 text-sm">
-                <span className="font-medium">{items.length} {items.length === 1 ? "file" : "files"} · {formatBytes(totalBytes)}</span>
+                <span className="font-medium">
+                  {items.length} {items.length === 1 ? "file" : "files"} · {formatBytes(totalBytes)}
+                  {tool.combine && items.length > 1 && (
+                    <span className="ml-2 font-mono text-xs text-subtle">{items.map((_, index) => index + 1).join(" → ")}</span>
+                  )}
+                </span>
                 <div className="flex items-center gap-1">
                   {tool.multiple && !running && (
                     <Button size="sm" variant="ghost" onClick={() => inputRef.current?.click()}>
@@ -311,6 +331,7 @@ export function ToolClient({ toolId }: { toolId: string }) {
                     progress={item.progress}
                     status={item.status}
                     error={item.error}
+                    stageLabel={stageFor(tool.id, item.progress, item.status)}
                     canReorder={Boolean(tool.combine && !running)}
                     isFirst={index === 0}
                     isLast={index === items.length - 1}
@@ -332,7 +353,7 @@ export function ToolClient({ toolId }: { toolId: string }) {
                   <p className="text-lg font-semibold" role="status" aria-live="polite">
                     {results.length} {results.length === 1 ? "file" : "files"} ready
                   </p>
-                  <p className="text-sm text-muted">{formatBytes(totalBytes)} → {formatBytes(outputBytes)}</p>
+                  <p className="whitespace-nowrap text-sm text-muted">{formatBytes(totalBytes)} → {formatBytes(outputBytes)}</p>
                 </div>
                 <Button variant="success" size="lg" onClick={downloadAll}>
                   <Download className="h-4 w-4" /> {results.length === 1 ? "Download" : "Download all (ZIP)"}
@@ -351,6 +372,7 @@ export function ToolClient({ toolId }: { toolId: string }) {
                   </li>
                 ))}
               </ul>
+              {results.map((file, index) => <ResultPreview key={`preview-${index}`} file={file} />)}
               <div className="mt-4 flex flex-wrap gap-2 border-t border-success/20 pt-4 text-sm">
                 <Button variant="secondary" size="sm" onClick={reset}><RotateCcw className="h-4 w-4" /> Convert another</Button>
                 <a href={`/convert/${next.id}`} className="inline-flex min-h-11 items-center gap-2 rounded-xl px-3 text-sm font-semibold text-[var(--accent-text)] hover:bg-brand-soft">
@@ -365,6 +387,14 @@ export function ToolClient({ toolId }: { toolId: string }) {
           {fields.length > 0 && (
             <Card className="p-5">
               <p className="mb-4 text-xs font-semibold uppercase tracking-wide text-subtle">Options</p>
+              {["reorder-pdf", "rotate-pdf", "split-pdf"].includes(tool.id) && (
+                <PdfPageGrid
+                  file={items[0]?.file ?? null}
+                  toolId={tool.id}
+                  order={String(opts.order ?? "")}
+                  onChange={setOption}
+                />
+              )}
               <div className="space-y-4">
                 {fields.map((field) => (
                   <FieldInput key={field.key} field={field} value={opts[field.key]} onChange={(value) => setOption(field.key, value)} />
@@ -403,18 +433,18 @@ export function ToolClient({ toolId }: { toolId: string }) {
 }
 
 function formatAccept(accept: string) {
-  const parts = accept.split(",").map((part) => part.trim()).filter(Boolean);
+  const mime: Record<string, string> = {
+    "image/png": "PNG", "image/jpeg": "JPG", "image/webp": "WEBP", "image/avif": "AVIF",
+    "image/heic": "HEIC", "image/gif": "GIF", "image/svg+xml": "SVG", "image/tiff": "TIFF", "image/bmp": "BMP",
+    "application/pdf": "PDF", "text/plain": "TXT", "text/html": "HTML",
+  };
   const seen = new Set<string>();
   const labels: string[] = [];
-  for (const part of parts) {
-    if (part.startsWith(".")) {
-      const ext = part.slice(1).toUpperCase();
-      if (seen.has(ext)) continue;
-      seen.add(ext);
-      labels.push(ext);
-    }
+  for (const part of accept.split(",").map((item) => item.trim()).filter(Boolean)) {
+    const label = part.startsWith(".") ? part.slice(1).toUpperCase() : mime[part] ?? part.split("/")[1]?.toUpperCase() ?? part;
+    if (!seen.has(label)) { seen.add(label); labels.push(label); }
   }
-  return labels.length ? labels.slice(0, 6).join(", ") + (labels.length > 6 ? "…" : "") : accept;
+  return labels.slice(0, 6).join(", ") + (labels.length > 6 ? "…" : "");
 }
 
 function fixFor(message: string) {
@@ -422,6 +452,69 @@ function fixFor(message: string) {
   if (/could not be opened|corrupt|password/i.test(message)) return "The file could not be read. Check that it is not password-protected or damaged, then try another file.";
   if (/memory|too large/i.test(message)) return "The file may be too large for this browser. Try a smaller file or a lower resolution.";
   return message;
+}
+
+function ResultPreview({ file }: { file: OutputFile }) {
+  const [text, setText] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [media, setMedia] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!/\.(txt|csv|srt|md)$/i.test(file.name)) return;
+    let alive = true;
+    void file.blob.text().then((value) => { if (alive) setText(value); }).catch(() => {});
+    return () => { alive = false; };
+  }, [file]);
+
+  useEffect(() => {
+    if (!/\.(mp3|wav|m4a|ogg|flac|mp4|webm|mov|mkv|avi)$/i.test(file.name)) return;
+    let alive = true;
+    let url: string | null = null;
+    void Promise.resolve().then(() => {
+      url = URL.createObjectURL(file.blob);
+      if (alive) setMedia(url);
+      else URL.revokeObjectURL(url);
+    });
+    return () => { alive = false; if (url) URL.revokeObjectURL(url); };
+  }, [file]);
+
+  useEffect(() => () => { if (media) URL.revokeObjectURL(media); }, [media]);
+
+  if (media) {
+    const video = /\.(mp4|webm|mov|mkv|avi)$/i.test(file.name);
+    return (
+      <div className="mt-4 rounded-xl border border-line bg-surface p-3">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-subtle">Preview · {file.name} · {formatBytes(file.blob.size)}</p>
+        {video ? <video controls src={media} className="max-h-64 w-full rounded-lg" aria-label="Preview converted video" /> : <audio controls src={media} className="w-full" aria-label="Preview converted audio" />}
+      </div>
+    );
+  }
+
+  if (text === null) return null;
+  return (
+    <div className="mt-4 rounded-xl border border-line bg-surface p-3">
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <p className="text-xs font-semibold uppercase tracking-wide text-subtle">Editable output · {file.name}</p>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => {
+            if (!navigator.clipboard) return;
+            void navigator.clipboard.writeText(text).then(() => setCopied(true)).catch(() => setCopied(false));
+          }}
+        >
+          {copied ? "Copied" : "Copy text"}
+        </Button>
+      </div>
+      <textarea
+        value={text}
+        onChange={(event) => { setText(event.target.value); setCopied(false); }}
+        rows={6}
+        aria-label={`Edit ${file.name}`}
+        className="w-full rounded-lg border border-line bg-surface-2 p-3 font-mono text-xs leading-relaxed outline-none focus:border-brand"
+      />
+    </div>
+  );
 }
 
 function FieldInput({
