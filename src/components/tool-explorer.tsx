@@ -70,11 +70,16 @@ const favoriteKey = "onno-favorite-tools";
 export function ToolExplorer() {
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
-  const [recent] = useState<string[]>(() => readList(recentKey));
-  const [favorites, setFavorites] = useState<string[]>(() => readList(favoriteKey));
+  // Start empty on both server and client; load history after hydration.
+  const [recent, setRecent] = useState<string[]>([]);
+  const [favorites, setFavorites] = useState<string[]>([]);
   const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    void Promise.resolve().then(() => {
+      setRecent(readList(recentKey));
+      setFavorites(readList(favoriteKey));
+    });
     if (window.matchMedia("(min-width: 768px)").matches) searchRef.current?.focus();
     function onKey(event: KeyboardEvent) {
       const target = event.target as HTMLElement | null;

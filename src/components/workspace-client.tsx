@@ -42,14 +42,7 @@ export function WorkspaceClient({ toolId }: { toolId: string }) {
   const [values, setValues] = useState<Record<string, string>>({});
   const [flatten, setFlatten] = useState(false);
   const [signOpen, setSignOpen] = useState(false);
-  const [saved, setSaved] = useState<{ name: string; dataUrl: string }[]>(() => {
-    try {
-      const raw: unknown = JSON.parse(localStorage.getItem("onno-signatures") ?? "[]");
-      return Array.isArray(raw) ? raw.filter((item): item is { name: string; dataUrl: string } => typeof item?.dataUrl === "string") : [];
-    } catch {
-      return [];
-    }
-  });
+  const [saved, setSaved] = useState<{ name: string; dataUrl: string }[]>([]);
   const [pendingImage, setPendingImage] = useState<string | null>(null);
   const [signers, setSigners] = useState<Signer[]>([{ id: newId(), name: "Signer 1", color: signerColors[0] }]);
   const [signerIndex, setSignerIndex] = useState(0);
@@ -64,6 +57,17 @@ export function WorkspaceClient({ toolId }: { toolId: string }) {
   const isSign = toolId === "sign-pdf";
   const isEdit = toolId === "edit-pdf";
   const isShare = toolId === "share-pdf";
+
+  useEffect(() => {
+    void Promise.resolve().then(() => {
+      try {
+        const raw: unknown = JSON.parse(localStorage.getItem("onno-signatures") ?? "[]");
+        if (Array.isArray(raw)) setSaved(raw.filter((item): item is { name: string; dataUrl: string } => typeof item?.dataUrl === "string"));
+      } catch {
+        // Storage is optional.
+      }
+    });
+  }, []);
 
   useEffect(() => {
     if (!file || isShare) return;

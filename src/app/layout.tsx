@@ -54,9 +54,8 @@ const themeScript = `try{const t=localStorage.getItem("onno-theme");if(t==="dark
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${inter.variable} ${bengali.variable}`} suppressHydrationWarning>
-      <head>
-        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
-      </head>
+      {/* Raw HTML keeps the pre-paint script out of React's component tree. */}
+      <head suppressHydrationWarning dangerouslySetInnerHTML={{ __html: `<script>${themeScript}</script>` }} />
       <body className="min-h-dvh antialiased">
         <SiteHeader />
         {children}

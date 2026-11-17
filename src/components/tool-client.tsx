@@ -39,16 +39,6 @@ function defaults(fields: Field[]): ConvertOptions {
   return Object.fromEntries(fields.map((f) => [f.key, f.default]));
 }
 
-function remembered(toolId: string, fields: Field[]): ConvertOptions {
-  const base = defaults(fields);
-  try {
-    const saved: unknown = JSON.parse(localStorage.getItem(`onno-opts:${toolId}`) ?? "null");
-    if (saved && typeof saved === "object") return { ...base, ...(saved as ConvertOptions) };
-  } catch {
-    // Private mode or disabled storage: defaults still work.
-  }
-  return base;
-}
 
 function stageFor(toolId: string, progress: number, status: Status): string {
   if (status === "queued") return "Ready";
@@ -72,8 +62,8 @@ function nextToolId(toolId: string): string {
 
 export function ToolClient({ toolId }: { toolId: string }) {
   const tool = toolById.get(toolId)!;
-  const fields = tool.options ?? [];
-  const [opts, setOpts] = useState<ConvertOptions>(() => remembered(toolId, fields));
+  const fields = useMemo(() => tool.options ?? [], [tool]);
+  const [opts, setOpts] = useState<ConvertOptions>(() => defaults(fields));
   const [items, setItems] = useState<Item[]>([]);
   const [running, setRunning] = useState(false);
   const [cancelling, setCancelling] = useState(false);
@@ -90,6 +80,17 @@ export function ToolClient({ toolId }: { toolId: string }) {
   const stage = running ? "Converting" : cancelling ? "Stopping" : results.length ? "Done" : items.length ? "Ready" : "Empty";
   const failed = failure || items.find((item) => item.status === "error")?.error || "";
   const next = toolById.get(nextToolId(toolId))!;
+
+  useEffect(() => {
+    void Promise.resolve().then(() => {
+      try {
+        const saved: unknown = JSON.parse(localStorage.getItem(`onno-opts:${toolId}`) ?? "null");
+        if (saved && typeof saved === "object") setOpts({ ...defaults(fields), ...(saved as ConvertOptions) });
+      } catch {
+        // Private mode or disabled storage: defaults still work.
+      }
+    });
+  }, [toolId, fields]);
 
   useEffect(() => {
     try {
