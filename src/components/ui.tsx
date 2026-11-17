@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode, type RefObject } from "react";
 import Image from "next/image";
 import { AlertCircle, Check, Loader2, X } from "lucide-react";
 import { cn, formatBytes } from "@/lib/utils";
@@ -79,12 +79,14 @@ export function Dropzone({
   onFiles,
   children,
   className,
+  inputRef,
 }: {
   accept: string;
   multiple?: boolean;
   onFiles: (files: FileList | null) => void;
   children: ReactNode;
   className?: string;
+  inputRef?: RefObject<HTMLInputElement | null>;
 }) {
   const [dragging, setDragging] = useState(false);
   return (
@@ -96,6 +98,7 @@ export function Dropzone({
       onDragLeave={() => setDragging(false)}
       onDrop={(event) => {
         event.preventDefault();
+        event.stopPropagation();
         setDragging(false);
         onFiles(event.dataTransfer.files);
       }}
@@ -107,6 +110,7 @@ export function Dropzone({
     >
       {children}
       <input
+        ref={inputRef}
         type="file"
         accept={accept}
         multiple={multiple}

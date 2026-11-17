@@ -2,23 +2,24 @@
 
 import {
   AlertCircle,
-  ArrowDown,
-  ArrowUp,
+  ArrowRight,
   Check,
   Download,
-  Loader2,
+  FileUp,
   Printer,
+  RotateCcw,
   Trash2,
   Upload,
-  X,
 } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
-import { toolById } from "@/convert/registry";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { availableTools, toolById } from "@/convert/registry";
 import { runPrint, runTool, type RunHandle } from "@/convert/runner";
-import { MAX_SAFE_BYTES, type ConvertOptions, type Field, type OutputFile } from "@/convert/types";
+import { type ConvertOptions, type Field, type OutputFile } from "@/convert/types";
 import { baseName, cn, formatBytes } from "@/lib/utils";
 import { saveBlob, saveZip } from "@/lib/download";
 import { VoiceRecorder } from "@/components/voice-recorder";
+import { Button, Card, Dropzone, FileRow, Toast } from "@/components/ui";
+import { ToolIcon } from "@/components/tool-icon";
 
 type Status = "queued" | "running" | "done" | "error";
 type Item = { key: string; file: File; status: Status; progress: number; error?: string };
@@ -37,59 +38,116 @@ function defaults(fields: Field[]): ConvertOptions {
   return Object.fromEntries(fields.map((f) => [f.key, f.default]));
 }
 
+function remembered(toolId: string, fields: Field[]): ConvertOptions {
+  const base = defaults(fields);
+  try {
+    const saved: unknown = JSON.parse(localStorage.getItem(`onno-opts:${toolId}`) ?? "null");
+    if (saved && typeof saved === "object") return { ...base, ...(saved as ConvertOptions) };
+  } catch {
+    // Private mode or disabled storage: defaults still work.
+  }
+  return base;
+}
+
+function nextToolId(toolId: string): string {
+  const tool = toolById.get(toolId);
+  const next = availableTools.find((item) => item.from === tool?.to && item.id !== toolId);
+  return next?.id ?? "image-to-pdf";
+}
+
 export function ToolClient({ toolId }: { toolId: string }) {
   const tool = toolById.get(toolId)!;
   const fields = tool.options ?? [];
-  const [opts, setOpts] = useState<ConvertOptions>(() => defaults(fields));
+  const [opts, setOpts] = useState<ConvertOptions>(() => remembered(toolId, fields));
   const [items, setItems] = useState<Item[]>([]);
   const [running, setRunning] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [results, setResults] = useState<OutputFile[]>([]);
-  const [dragging, setDragging] = useState(false);
   const [message, setMessage] = useState("");
+  const [failure, setFailure] = useState("");
+  const [dragging, setDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const handleRef = useRef<RunHandle | null>(null);
   const cancelledRef = useRef(false);
 
   const totalBytes = useMemo(() => items.reduce((sum, i) => sum + i.file.size, 0), [items]);
+  const outputBytes = useMemo(() => results.reduce((sum, file) => sum + file.blob.size, 0), [results]);
+  const stage = running ? "Converting" : cancelling ? "Stopping" : results.length ? "Done" : items.length ? "Ready" : "Empty";
+  const failed = failure || items.find((item) => item.status === "error")?.error || "";
+  const next = toolById.get(nextToolId(toolId))!;
 
-  function addFiles(list: FileList | null) {
+  useEffect(() => {
+    try {
+      const recent: unknown = JSON.parse(localStorage.getItem("onno-recent-tools") ?? "[]");
+      const list = Array.isArray(recent) ? recent.filter((id): id is string => typeof id === "string") : [];
+      localStorage.setItem("onno-recent-tools", JSON.stringify([toolId, ...list.filter((id) => id !== toolId)].slice(0, 8)));
+    } catch {
+      // History is optional.
+    }
+  }, [toolId]);
+
+  useEffect(() => {
+    function onPaste(event: ClipboardEvent) {
+      const target = event.target as HTMLElement | null;
+      if (target && /^(INPUT|TEXTAREA)$/.test(target.tagName)) return;
+      const files = Array.from(event.clipboardData?.files ?? []);
+      if (files.length && tool.id !== "voice-recorder") {
+        event.preventDefault();
+        addFiles(files);
+      }
+    }
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  });
+
+  function setOption(key: string, value: string | number | boolean) {
+    const nextOpts = { ...opts, [key]: value };
+    setOpts(nextOpts);
+    try {
+      localStorage.setItem(`onno-opts:${toolId}`, JSON.stringify(nextOpts));
+    } catch {
+      // Options still apply to the current conversion.
+    }
+  }
+
+  function addFiles(list: FileList | File[] | null) {
     if (!list?.length) return;
     const incoming = Array.from(list);
-    const accepted = incoming.filter((f) => accepts(f, tool.accept));
+    const accepted = incoming.filter((file) => accepts(file, tool.accept));
     const rejected = incoming.length - accepted.length;
     setMessage(rejected ? `${rejected} file${rejected > 1 ? "s" : ""} ignored — wrong format for this tool.` : "");
+    setFailure("");
     if (!accepted.length) return;
 
     setResults([]);
     setItems((prev) => {
-      const next = tool.multiple ? [...prev] : [];
+      const nextItems = tool.multiple ? [...prev] : [];
       for (const file of tool.multiple ? accepted : accepted.slice(0, 1)) {
-        next.push({ key: crypto.randomUUID(), file, status: "queued", progress: 0 });
+        nextItems.push({ key: crypto.randomUUID(), file, status: "queued", progress: 0 });
       }
-      return next;
+      return nextItems;
     });
     if (inputRef.current) inputRef.current.value = "";
   }
 
   function remove(key: string) {
     if (running) return;
-    setItems((prev) => prev.filter((i) => i.key !== key));
+    setItems((prev) => prev.filter((item) => item.key !== key));
   }
 
   function move(key: string, direction: -1 | 1) {
     setItems((prev) => {
-      const index = prev.findIndex((i) => i.key === key);
+      const index = prev.findIndex((item) => item.key === key);
       const target = index + direction;
       if (index < 0 || target < 0 || target >= prev.length) return prev;
-      const next = [...prev];
-      [next[index], next[target]] = [next[target], next[index]];
-      return next;
+      const nextItems = [...prev];
+      [nextItems[index], nextItems[target]] = [nextItems[target], nextItems[index]];
+      return nextItems;
     });
   }
 
   function patch(key: string, changes: Partial<Item>) {
-    setItems((prev) => prev.map((i) => (i.key === key ? { ...i, ...changes } : i)));
+    setItems((prev) => prev.map((item) => (item.key === key ? { ...item, ...changes } : item)));
   }
 
   async function convert() {
@@ -99,17 +157,18 @@ export function ToolClient({ toolId }: { toolId: string }) {
     cancelledRef.current = false;
     setResults([]);
     setMessage("");
+    setFailure("");
 
     try {
       if (tool.combine) {
-        setItems((prev) => prev.map((i) => ({ ...i, status: "running" as const, progress: 0, error: undefined })));
-        const handle = runTool(tool.id, items.map((i) => i.file), opts, (progress) =>
-          setItems((prev) => prev.map((i) => ({ ...i, progress }))),
+        setItems((prev) => prev.map((item) => ({ ...item, status: "running" as const, progress: 0, error: undefined })));
+        const handle = runTool(tool.id, items.map((item) => item.file), opts, (progress) =>
+          setItems((prev) => prev.map((item) => ({ ...item, progress }))),
         );
         handleRef.current = handle;
         const output = await handle.promise;
         if (cancelledRef.current) return;
-        setItems((prev) => prev.map((i) => ({ ...i, status: "done" as const, progress: 1 })));
+        setItems((prev) => prev.map((item) => ({ ...item, status: "done" as const, progress: 1 })));
         setResults(output);
       } else {
         const collected: OutputFile[] = [];
@@ -135,8 +194,8 @@ export function ToolClient({ toolId }: { toolId: string }) {
       }
     } catch (error) {
       if (!cancelledRef.current) {
-        setMessage(error instanceof Error ? error.message : "Conversion failed.");
-        setItems((prev) => prev.map((i) => (i.status === "running" ? { ...i, status: "error" as const } : i)));
+        setFailure(error instanceof Error ? error.message : "Conversion failed.");
+        setItems((prev) => prev.map((item) => (item.status === "running" ? { ...item, status: "error" as const } : item)));
       }
     } finally {
       handleRef.current = null;
@@ -149,10 +208,15 @@ export function ToolClient({ toolId }: { toolId: string }) {
     cancelledRef.current = true;
     setCancelling(true);
     handleRef.current?.cancel();
-    setMessage("Cancellation requested.");
-    setItems((prev) =>
-      prev.map((i) => (i.status === "running" ? { ...i, status: "queued" as const, progress: 0 } : i)),
-    );
+    setMessage("");
+    setItems((prev) => prev.map((item) => (item.status === "running" ? { ...item, status: "queued" as const, progress: 0 } : item)));
+  }
+
+  function reset() {
+    setItems([]);
+    setResults([]);
+    setMessage("");
+    setFailure("");
   }
 
   async function openPrint() {
@@ -174,252 +238,190 @@ export function ToolClient({ toolId }: { toolId: string }) {
   const canRun = items.length > 0 && !running;
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[1fr_300px]">
-      <div className="min-w-0">
-        {tool.id === "voice-recorder" ? (
-          <VoiceRecorder
-            onRecorded={(file) => {
-              setItems([{ key: crypto.randomUUID(), file, status: "queued", progress: 0 }]);
-              setResults([]);
-              setMessage("");
-            }}
-          />
-        ) : (
-          <label
-            onDragOver={(e) => {
-              e.preventDefault();
-              setDragging(true);
-            }}
-            onDragLeave={() => setDragging(false)}
-            onDrop={(e) => {
-              e.preventDefault();
-              setDragging(false);
-              addFiles(e.dataTransfer.files);
-            }}
-            className={cn(
-              "flex cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed px-6 py-12 text-center transition focus-within:outline-2 focus-within:outline-brand focus-within:outline-offset-2",
-              dragging
-                ? "border-brand bg-brand-soft dark:bg-brand/10"
-                : "border-black/15 bg-white hover:border-brand/50 dark:border-white/15 dark:bg-white/[0.03] dark:hover:border-brand/50",
-            )}
-          >
-            <span className="flex h-11 w-11 items-center justify-center rounded-full bg-brand-soft text-brand dark:bg-brand/20 dark:text-violet-300">
-              <Upload className="h-5 w-5" />
-            </span>
-            <span className="text-sm font-medium">
-              Drop {tool.multiple ? "files" : "a file"} here or <span className="text-brand underline">browse</span>
-            </span>
-            <span className="max-w-sm text-xs text-black/45 dark:text-white/45">
-              {tool.accept.replaceAll(",", " · ")} {tool.multiple ? "· multiple allowed" : ""}
-            </span>
-            <input
-              ref={inputRef}
-              type="file"
-              accept={tool.accept}
-              multiple={tool.multiple}
-              onChange={(e) => addFiles(e.target.files)}
-              className="sr-only"
-              aria-label={`Choose ${tool.multiple ? "files" : "a file"}`}
-            />
-          </label>
-        )}
-
-        {message && (
-          <p className="mt-3 flex items-start gap-2 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-400/10 dark:text-amber-200" role="status">
-            <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" /> {message}
-          </p>
-        )}
-
-        {items.length > 0 && (
-          <div className="mt-4 rounded-2xl border border-black/5 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
-            <div className="flex items-center justify-between border-b border-black/5 px-4 py-3 text-xs text-black/50 dark:border-white/10 dark:text-white/50">
-              <span>
-                {items.length} {items.length === 1 ? "file" : "files"} · {formatBytes(totalBytes)}
+    <div
+      className={cn("pb-28 lg:pb-0", dragging && "rounded-2xl ring-2 ring-brand ring-offset-4")}
+      onDragOver={(event) => { if (event.dataTransfer.types.includes("Files")) { event.preventDefault(); setDragging(true); } }}
+      onDragLeave={(event) => { if (event.currentTarget === event.target) setDragging(false); }}
+      onDrop={(event) => {
+        if (!event.dataTransfer.files.length) return;
+        event.preventDefault();
+        setDragging(false);
+        if (tool.id !== "voice-recorder") addFiles(event.dataTransfer.files);
+      }}
+    >
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="min-w-0 space-y-4">
+          {!items.length && tool.id !== "voice-recorder" && (
+            <Dropzone accept={tool.accept} multiple={tool.multiple} onFiles={addFiles} inputRef={inputRef} className="py-14">
+              <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-soft text-[var(--accent-text)]">
+                <Upload className="h-6 w-6" aria-hidden="true" />
               </span>
-              {!running && (
-                <button
-                  onClick={() => {
-                    setItems([]);
-                    setResults([]);
-                    setMessage("");
-                  }}
-                  className="rounded px-1.5 py-0.5 font-medium hover:bg-black/5 dark:hover:bg-white/10"
-                >
-                  Clear
-                </button>
-              )}
-            </div>
-            <ul className="divide-y divide-black/5 dark:divide-white/10">
-              {items.map((item, index) => (
-                <li key={item.key} className="px-4 py-3">
-                  <div className="flex items-start gap-3">
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium" title={item.file.name}>
-                        {item.file.name}
-                      </p>
-                      <p className="mt-0.5 text-xs text-black/45 dark:text-white/45">
-                        {formatBytes(item.file.size)}
-                        {item.file.size > MAX_SAFE_BYTES && (
-                          <span className="ml-2 font-medium text-amber-600 dark:text-amber-300">
-                            Large — may run out of memory
-                          </span>
-                        )}
-                      </p>
-                      {(item.status === "running" || item.progress > 0) && item.status !== "error" && (
-                        <div
-                          className="mt-2 h-1.5 overflow-hidden rounded-full bg-black/10 dark:bg-white/10"
-                          role="progressbar"
-                          aria-label={`Converting ${item.file.name}`}
-                          aria-valuemin={0}
-                          aria-valuemax={100}
-                          aria-valuenow={Math.round(item.progress * 100)}
-                        >
-                          <div
-                            aria-hidden="true"
-                            className="h-full rounded-full bg-brand transition-[width]"
-                            style={{ width: `${Math.round(item.progress * 100)}%` }}
-                          />
-                        </div>
-                      )}
-                      {item.error && (
-                        <p className="mt-1.5 text-xs text-rose-600 dark:text-rose-300" role="alert">
-                          {item.error}
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex shrink-0 items-center gap-1">
-                      {item.status === "done" && <Check className="h-4 w-4 text-emerald-500" aria-label="Done" />}
-                      {item.status === "error" && <AlertCircle className="h-4 w-4 text-rose-500" aria-label="Failed" />}
-                      {tool.combine && !running && (
-                        <>
-                          <button
-                            onClick={() => move(item.key, -1)}
-                            disabled={index === 0}
-                            className="rounded p-1 text-black/40 hover:bg-black/5 disabled:opacity-25 dark:text-white/40 dark:hover:bg-white/10"
-                            aria-label={`Move ${item.file.name} up`}
-                          >
-                            <ArrowUp className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={() => move(item.key, 1)}
-                            disabled={index === items.length - 1}
-                            className="rounded p-1 text-black/40 hover:bg-black/5 disabled:opacity-25 dark:text-white/40 dark:hover:bg-white/10"
-                            aria-label={`Move ${item.file.name} down`}
-                          >
-                            <ArrowDown className="h-4 w-4" />
-                          </button>
-                        </>
-                      )}
-                      {!running && (
-                        <button
-                          onClick={() => remove(item.key)}
-                          className="rounded p-1 text-black/40 hover:bg-black/5 hover:text-rose-600 dark:text-white/40 dark:hover:bg-white/10 dark:hover:text-rose-300"
-                          aria-label={`Remove ${item.file.name}`}
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {results.length > 0 && (
-          <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4 dark:border-emerald-400/20 dark:bg-emerald-400/10">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-200" role="status" aria-live="polite">
-                {results.length} {results.length === 1 ? "file" : "files"} ready
+              <span className="pointer-events-none mt-4 inline-flex min-h-11 items-center rounded-xl bg-brand px-4 text-sm font-semibold text-[var(--accent-contrast)]">
+                Choose {tool.multiple ? "files" : "a file"}
+              </span>
+              <p className="mt-3 text-sm font-medium">
+                Drag {tool.multiple ? "files" : "a file"} here, browse, or paste
               </p>
-              <button
-                onClick={downloadAll}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-emerald-700"
-              >
-                <Download className="h-3.5 w-3.5" />
-                {results.length === 1 ? "Download" : "Download all (ZIP)"}
-              </button>
+              <p className="mt-1 max-w-sm text-xs text-muted">
+                {formatAccept(tool.accept)} · up to 200 MB suggested. Files stay on this device.
+              </p>
+            </Dropzone>
+          )}
+
+          {tool.id === "voice-recorder" && (
+            <VoiceRecorder onRecorded={(file) => { setItems([{ key: crypto.randomUUID(), file, status: "queued", progress: 0 }]); setResults([]); setMessage(""); }} />
+          )}
+
+          {message && <Toast>{message}</Toast>}
+
+          {failed && (
+            <Card className="onno-pop border-danger/30 bg-danger-soft/60 p-5">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-danger" aria-hidden="true" />
+                <div className="flex-1">
+                  <h2 className="font-semibold">That file could not be converted</h2>
+                  <p className="mt-1 text-sm text-muted">{fixFor(failed)}</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Button size="sm" variant="secondary" onClick={convert}>Try again</Button>
+                    <Button size="sm" variant="ghost" onClick={reset}>Choose another file</Button>
+                  </div>
+                </div>
+              </div>
+            </Card>
+          )}
+
+          {items.length > 0 && (
+            <Card className="overflow-hidden">
+              <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3 text-sm">
+                <span className="font-medium">{items.length} {items.length === 1 ? "file" : "files"} · {formatBytes(totalBytes)}</span>
+                <div className="flex items-center gap-1">
+                  {tool.multiple && !running && (
+                    <Button size="sm" variant="ghost" onClick={() => inputRef.current?.click()}>
+                      <FileUp className="h-4 w-4" /> Add more
+                    </Button>
+                  )}
+                  {!running && <Button size="sm" variant="ghost" onClick={reset}>Clear</Button>}
+                </div>
+              </div>
+              <ul className="divide-y divide-line">
+                {items.map((item, index) => (
+                  <FileRow
+                    key={item.key}
+                    file={item.file}
+                    progress={item.progress}
+                    status={item.status}
+                    error={item.error}
+                    canReorder={Boolean(tool.combine && !running)}
+                    isFirst={index === 0}
+                    isLast={index === items.length - 1}
+                    onRemove={running ? undefined : () => remove(item.key)}
+                    onMove={(direction) => move(item.key, direction)}
+                  />
+                ))}
+              </ul>
+            </Card>
+          )}
+
+          {results.length > 0 && (
+            <Card className="onno-pop border-success/40 bg-success-soft/70 p-5">
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="flex h-11 w-11 items-center justify-center rounded-full bg-success text-[var(--success-contrast)]">
+                  <Check className="h-5 w-5" aria-hidden="true" />
+                </span>
+                <div className="flex-1">
+                  <p className="text-lg font-semibold" role="status" aria-live="polite">
+                    {results.length} {results.length === 1 ? "file" : "files"} ready
+                  </p>
+                  <p className="text-sm text-muted">{formatBytes(totalBytes)} → {formatBytes(outputBytes)}</p>
+                </div>
+                <Button variant="success" size="lg" onClick={downloadAll}>
+                  <Download className="h-4 w-4" /> {results.length === 1 ? "Download" : "Download all (ZIP)"}
+                </Button>
+              </div>
+              <ul className="mt-4 space-y-1 border-t border-success/20 pt-3">
+                {results.map((file, index) => (
+                  <li key={`${file.name}-${index}`} className="flex items-center justify-between gap-3 text-sm">
+                    <span className="truncate">{file.name}</span>
+                    <span className="flex items-center gap-2 text-muted">
+                      {formatBytes(file.blob.size)}
+                      <Button size="sm" variant="ghost" aria-label={`Download ${file.name}`} onClick={() => saveBlob(file.blob, file.name)}>
+                        <Download className="h-4 w-4" />
+                      </Button>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-4 flex flex-wrap gap-2 border-t border-success/20 pt-4 text-sm">
+                <Button variant="secondary" size="sm" onClick={reset}><RotateCcw className="h-4 w-4" /> Convert another</Button>
+                <a href={`/convert/${next.id}`} className="inline-flex min-h-11 items-center gap-2 rounded-xl px-3 text-sm font-semibold text-[var(--accent-text)] hover:bg-brand-soft">
+                  <ToolIcon name={next.icon} className="h-4 w-4" /> Use result in {next.label} <ArrowRight className="h-4 w-4" />
+                </a>
+              </div>
+            </Card>
+          )}
+        </div>
+
+        <aside className="space-y-4">
+          {fields.length > 0 && (
+            <Card className="p-5">
+              <p className="mb-4 text-xs font-semibold uppercase tracking-wide text-subtle">Options</p>
+              <div className="space-y-4">
+                {fields.map((field) => (
+                  <FieldInput key={field.key} field={field} value={opts[field.key]} onChange={(value) => setOption(field.key, value)} />
+                ))}
+              </div>
+            </Card>
+          )}
+
+          {tool.note && <p className="rounded-xl border border-line bg-surface-2/60 p-4 text-xs leading-relaxed text-muted">{tool.note}</p>}
+
+          <div className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/95 p-3 shadow-lg backdrop-blur lg:static lg:inset-auto lg:z-auto lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none">
+            <div className="mx-auto max-w-6xl space-y-2 lg:mx-0">
+              {tool.print ? (
+                <Button size="lg" className="w-full" disabled={!canRun} onClick={openPrint}>
+                  <Printer className="h-4 w-4" /> Open print dialog
+                </Button>
+              ) : (
+                <>
+                  <Button size="lg" className="w-full" disabled={!canRun} loading={running} onClick={convert}>
+                    {running ? "Converting…" : "Convert"}
+                  </Button>
+                  {running && (
+                    <Button size="lg" variant="secondary" className="w-full" disabled={cancelling} onClick={cancel}>
+                      <Trash2 className="h-4 w-4" /> {cancelling ? "Stopping…" : "Cancel"}
+                    </Button>
+                  )}
+                </>
+              )}
+              <p className="hidden text-center text-xs text-subtle lg:block">Stage: {stage} · processed on your device</p>
             </div>
-            <ul className="mt-2 space-y-1">
-              {results.map((file, i) => (
-                <li key={`${file.name}-${i}`} className="flex items-center justify-between gap-2 text-xs">
-                  <span className="truncate text-emerald-900/80 dark:text-emerald-100/80">{file.name}</span>
-                  <span className="flex shrink-0 items-center gap-2 text-emerald-900/60 dark:text-emerald-100/60">
-                    {formatBytes(file.blob.size)}
-                    <button
-                      onClick={() => saveBlob(file.blob, file.name)}
-                      className="rounded p-1 hover:bg-emerald-600/10"
-                      aria-label={`Download ${file.name}`}
-                    >
-                      <Download className="h-3.5 w-3.5" />
-                    </button>
-                  </span>
-                </li>
-              ))}
-            </ul>
           </div>
-        )}
+        </aside>
       </div>
-
-      <aside className="space-y-4">
-        {fields.length > 0 && (
-          <div className="rounded-2xl border border-black/5 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
-            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-black/45 dark:text-white/45">Options</p>
-            <div className="space-y-3">
-              {fields.map((field) => (
-                <FieldInput
-                  key={field.key}
-                  field={field}
-                  value={opts[field.key]}
-                  onChange={(value) => setOpts((prev) => ({ ...prev, [field.key]: value }))}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-
-        {tool.print ? (
-          <button
-            onClick={openPrint}
-            disabled={!canRun}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-ink px-4 py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-black"
-          >
-            <Printer className="h-4 w-4" /> Open print dialog
-          </button>
-        ) : (
-          <div className="space-y-2">
-            <button
-              onClick={convert}
-              disabled={!canRun}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-ink px-4 py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-black"
-            >
-              {running ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              {running ? "Converting…" : "Convert"}
-            </button>
-            {running && (
-              <button
-                onClick={cancel}
-                disabled={cancelling}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-black/10 px-4 py-2.5 text-sm font-medium transition hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/10"
-              >
-                <Trash2 className="h-4 w-4" /> {cancelling ? "Stopping…" : "Cancel"}
-              </button>
-            )}
-          </div>
-        )}
-
-        {tool.note && (
-          <p className="rounded-xl border border-black/5 bg-white/60 p-3 text-xs leading-relaxed text-black/55 dark:border-white/10 dark:bg-white/[0.02] dark:text-white/55">
-            {tool.note}
-          </p>
-        )}
-        <p className="text-xs leading-relaxed text-black/40 dark:text-white/40">
-          Output keeps your filename: <code className="font-mono">name.converted.ext</code>
-        </p>
-      </aside>
     </div>
   );
+}
+
+function formatAccept(accept: string) {
+  const parts = accept.split(",").map((part) => part.trim()).filter(Boolean);
+  const seen = new Set<string>();
+  const labels: string[] = [];
+  for (const part of parts) {
+    if (part.startsWith(".")) {
+      const ext = part.slice(1).toUpperCase();
+      if (seen.has(ext)) continue;
+      seen.add(ext);
+      labels.push(ext);
+    }
+  }
+  return labels.length ? labels.slice(0, 6).join(", ") + (labels.length > 6 ? "…" : "") : accept;
+}
+
+function fixFor(message: string) {
+  if (/avif/i.test(message)) return "This browser can't encode AVIF. Try Chrome or Edge, or convert to WebP instead.";
+  if (/could not be opened|corrupt|password/i.test(message)) return "The file could not be read. Check that it is not password-protected or damaged, then try another file.";
+  if (/memory|too large/i.test(message)) return "The file may be too large for this browser. Try a smaller file or a lower resolution.";
+  return message;
 }
 
 function FieldInput({
@@ -432,25 +434,16 @@ function FieldInput({
   onChange: (value: string | number | boolean) => void;
 }) {
   const id = `opt-${field.key}`;
+  const input = "h-11 w-full rounded-xl border border-line bg-surface px-3 text-sm outline-none transition focus:border-brand";
 
   if (field.type === "select") {
     return (
       <div>
-        <label htmlFor={id} className="mb-1 block text-xs font-medium text-black/65 dark:text-white/65">
-          {field.label}
-        </label>
-        <select
-          id={id}
-          value={String(value)}
-          onChange={(e) => onChange(e.target.value)}
-          className="h-9 w-full rounded-lg border border-black/10 bg-white px-2 text-sm outline-none focus:border-brand dark:border-white/15 dark:bg-[#17171a] dark:text-white"
-        >
-          {field.options?.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
+        <label htmlFor={id} className="mb-1.5 block text-sm font-medium">{field.label}</label>
+        <select id={id} value={String(value)} onChange={(event) => onChange(event.target.value)} className={input}>
+          {field.options?.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
         </select>
+        {field.help && <p className="mt-1 text-xs text-muted">{field.help}</p>}
       </div>
     );
   }
@@ -459,29 +452,19 @@ function FieldInput({
     return (
       <div>
         <div className="mb-1 flex items-center justify-between">
-          <label htmlFor={id} className="text-xs font-medium text-black/65 dark:text-white/65">
-            {field.label}
-          </label>
-          <span className="font-mono text-xs text-black/50 dark:text-white/50">{String(value)}</span>
+          <label htmlFor={id} className="text-sm font-medium">{field.label}</label>
+          <span className="font-mono text-xs text-muted">{String(value)}</span>
         </div>
-        <input
-          id={id}
-          type="range"
-          min={field.min}
-          max={field.max}
-          step={field.step}
-          value={Number(value)}
-          onChange={(e) => onChange(Number(e.target.value))}
-          className="w-full accent-brand"
-        />
+        <input id={id} type="range" min={field.min} max={field.max} step={field.step} value={Number(value)} onChange={(event) => onChange(Number(event.target.value))} className="w-full accent-brand" />
+        {field.help && <p className="mt-1 text-xs text-muted">{field.help}</p>}
       </div>
     );
   }
 
   if (field.type === "checkbox") {
     return (
-      <label htmlFor={id} className="flex items-center gap-2 text-xs font-medium text-black/65 dark:text-white/65">
-        <input id={id} type="checkbox" checked={Boolean(value)} onChange={(e) => onChange(e.target.checked)} className="h-4 w-4 accent-brand" />
+      <label htmlFor={id} className="flex min-h-11 items-center gap-2 text-sm font-medium">
+        <input id={id} type="checkbox" checked={Boolean(value)} onChange={(event) => onChange(event.target.checked)} className="h-4 w-4 accent-brand" />
         {field.label}
       </label>
     );
@@ -489,9 +472,7 @@ function FieldInput({
 
   return (
     <div>
-      <label htmlFor={id} className="mb-1 block text-xs font-medium text-black/65 dark:text-white/65">
-        {field.label}
-      </label>
+      <label htmlFor={id} className="mb-1.5 block text-sm font-medium">{field.label}</label>
       <input
         id={id}
         type={field.type === "number" ? "number" : "text"}
@@ -500,10 +481,10 @@ function FieldInput({
         step={field.step}
         placeholder={field.placeholder}
         value={String(value ?? "")}
-        onChange={(e) => onChange(field.type === "number" ? Number(e.target.value) : e.target.value)}
-        className="h-9 w-full rounded-lg border border-black/10 bg-white px-2 text-sm outline-none focus:border-brand dark:border-white/15 dark:bg-[#17171a] dark:text-white"
+        onChange={(event) => onChange(field.type === "number" ? Number(event.target.value) : event.target.value)}
+        className={input}
       />
-      {field.help && <p className="mt-1 text-[11px] text-black/40 dark:text-white/40">{field.help}</p>}
+      {field.help && <p className="mt-1 text-xs text-muted">{field.help}</p>}
     </div>
   );
 }

@@ -143,7 +143,7 @@ Phase 2 implementation is present; Bengali speech-to-text remains unreliable. Ph
 ## Phase 5 — UI/UX redesign
 - [x] Audit: 54 Playwright screenshots (`design-audit/before/`), critique and short plan in `DESIGN.md`
 - [x] Milestone 1: design tokens (light/dark), Inter + Noto Sans Bengali fonts, UI kit, home redesign, command palette
-- [ ] Milestone 2: four-state tool flow with sticky action bar, real progress, retryable errors, next-tool shortcuts
+- [x] Milestone 2: four-state tool flow with sticky action bar, real progress, retryable errors, next-tool shortcuts
 - [ ] Milestone 3: special-tool UX, global polish, after screenshots + Lighthouse + final report
 
 ## Next step
