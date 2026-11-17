@@ -1,27 +1,80 @@
 "use client";
 
 import Link from "next/link";
-import { Search, X } from "lucide-react";
+import { ArrowRight, LockKeyhole, Search, Star, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { availableTools, categoryMeta, type Tool } from "@/convert/registry";
-import { groupOf, type ToolGroup } from "@/convert/types";
+import type { Category } from "@/convert/types";
 import { ToolIcon } from "@/components/tool-icon";
 import { tileColor } from "@/components/colors";
+import { Button, EmptyState, Kbd, Tabs } from "@/components/ui";
 import { cn } from "@/lib/utils";
 
-const tabs: { id: ToolGroup | "all"; label: string }[] = [
+type Filter = "all" | "voice" | Category;
+
+const filters: { id: Filter; label: string }[] = [
   { id: "all", label: "All tools" },
-  { id: "from-pdf", label: "Convert from PDF" },
-  { id: "to-pdf", label: "Convert to PDF" },
-  { id: "other", label: "Other formats" },
+  { id: "pdf", label: "PDF" },
+  { id: "image", label: "Image" },
+  { id: "audio", label: "Audio" },
+  { id: "video", label: "Video" },
+  { id: "document", label: "Document" },
+  { id: "data", label: "Data" },
+  { id: "ebook", label: "Ebook" },
+  { id: "voice", label: "Voice" },
 ];
 
+const aliases: Record<string, string> = {
+  jpeg: "jpg", excel: "xlsx", word: "docx", powerpoint: "pptx", subtitle: "srt",
+};
+
+function haystack(tool: Tool) {
+  return [tool.label, tool.hint, tool.from, tool.to, tool.category, tool.id, aliases[tool.from] ?? "", aliases[tool.to] ?? ""]
+    .join(" ")
+    .toLowerCase();
+}
+
+function matches(tool: Tool, query: string) {
+  const text = haystack(tool);
+  return query.trim().toLowerCase().split(/\s+/).every((term) => {
+    const t = aliases[term] ?? term;
+    if (text.includes(t)) return true;
+    if (t.length > 6) return false;
+    let i = 0;
+    for (const char of text) if (char === t[i]) i++;
+    return i === t.length;
+  });
+}
+
+function readList(key: string): string[] {
+  try {
+    const value: unknown = JSON.parse(localStorage.getItem(key) ?? "[]");
+    return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeList(key: string, value: string[]) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Storage can be disabled; the tools still work without history.
+  }
+}
+
+const recentKey = "onno-recent-tools";
+const favoriteKey = "onno-favorite-tools";
+
 export function ToolExplorer() {
-  const [tab, setTab] = useState<ToolGroup | "all">("all");
+  const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
+  const [recent] = useState<string[]>(() => readList(recentKey));
+  const [favorites, setFavorites] = useState<string[]>(() => readList(favoriteKey));
   const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    if (window.matchMedia("(min-width: 768px)").matches) searchRef.current?.focus();
     function onKey(event: KeyboardEvent) {
       const target = event.target as HTMLElement | null;
       const typing = target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName);
@@ -38,107 +91,163 @@ export function ToolExplorer() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const visible = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return availableTools.filter((tool) => {
-      if (tab !== "all" && groupOf(tool.from, tool.to) !== tab) return false;
-      if (!q) return true;
-      return [tool.label, tool.hint, tool.from, tool.to, tool.category, tool.id].join(" ").toLowerCase().includes(q);
-    });
-  }, [tab, query]);
+  const visible = useMemo(
+    () => availableTools.filter((tool) => (filter === "all" || (filter === "voice" ? ["voice-recorder", "speech-to-text"].includes(tool.id) : tool.category === filter)) && matches(tool, query)),
+    [filter, query],
+  );
+  const byId = (id: string) => availableTools.find((tool) => tool.id === id);
+
+  function toggleFavorite(id: string) {
+    const next = favorites.includes(id) ? favorites.filter((item) => item !== id) : [...favorites, id];
+    setFavorites(next);
+    writeList(favoriteKey, next);
+  }
 
   return (
-    <section id="tools" className="mx-auto w-full max-w-6xl scroll-mt-20 px-4 sm:px-6">
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div className="flex flex-wrap gap-1 rounded-xl border border-black/5 bg-white p-1 shadow-sm dark:border-white/10 dark:bg-white/5" role="group" aria-label="Tool categories">
-          {tabs.map((t) => (
-            <button
-              key={t.id}
-              aria-pressed={tab === t.id}
-              onClick={() => setTab(t.id)}
-              className={cn(
-                "rounded-lg px-3.5 py-2 text-sm font-medium transition",
-                tab === t.id
-                  ? "bg-ink text-white shadow-sm dark:bg-white dark:text-black"
-                  : "text-black/60 hover:bg-black/5 hover:text-black dark:text-white/60 dark:hover:bg-white/10 dark:hover:text-white",
-              )}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-
-        <div className="relative w-full md:w-72">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-black/35 dark:text-white/35" />
-          <input
-            ref={searchRef}
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search tools…"
-            aria-label="Search tools"
-            className="h-11 w-full rounded-xl border border-black/10 bg-white pl-9 pr-9 text-sm shadow-sm outline-none transition placeholder:text-black/35 focus:border-brand/60 dark:border-white/10 dark:bg-white/5 dark:placeholder:text-white/35"
-          />
-          <kbd className="pointer-events-none absolute right-2.5 top-1/2 hidden -translate-y-1/2 rounded border border-black/10 px-1.5 py-0.5 text-[11px] text-black/40 sm:block dark:border-white/15 dark:text-white/40">
-            /
-          </kbd>
-          {query && (
-            <button
-              onClick={() => setQuery("")}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded p-1 text-black/40 hover:text-black dark:text-white/40 dark:hover:text-white"
-              aria-label="Clear search"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          )}
-        </div>
-      </div>
-
-      <p className="mt-4 text-sm text-black/50 dark:text-white/50" aria-live="polite">
-        {visible.length} {visible.length === 1 ? "tool" : "tools"}
-        {query ? ` matching “${query}”` : ""}
-      </p>
-
-      {visible.length ? (
-        <ul className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-          {visible.map((tool) => (
-            <ToolCard key={tool.id} tool={tool} />
-          ))}
-        </ul>
-      ) : (
-        <div className="mt-10 rounded-2xl border border-dashed border-black/15 p-10 text-center dark:border-white/15">
-          <p className="font-medium">No tool matches that search.</p>
-          <p className="mt-1 text-sm text-black/50 dark:text-white/50">
-            Try “pdf”, “video”, “excel”, or browse{" "}
-            <button onClick={() => setTab("all")} className="font-medium text-brand underline">
-              all tools
-            </button>
-            .
+    <main>
+      <section className="relative overflow-hidden border-b border-line/70">
+        <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(70%_60%_at_50%_-10%,var(--accent-soft)_0%,transparent_70%)]" />
+        <div className="mx-auto w-full max-w-6xl px-4 pb-10 pt-12 text-center sm:px-6 sm:pt-16">
+          <p className="mx-auto mb-4 w-fit rounded-full border border-brand/20 bg-surface px-3 py-1 text-xs font-medium text-[var(--accent-text)]">
+            Private by design · nothing is uploaded
           </p>
+          <h1 className="text-balance text-4xl font-semibold tracking-tight sm:text-6xl">
+            Convert anything. <span className="text-brand">Privately.</span>
+          </h1>
+          <p className="mx-auto mt-4 max-w-xl text-pretty text-base leading-relaxed text-muted">
+            PDF, images, spreadsheets, audio, video and ebooks — converted in your browser by OnnoPoth.
+            Your files never leave this device.
+          </p>
+          <div className="relative mx-auto mt-8 max-w-2xl text-left">
+            <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-subtle" aria-hidden="true" />
+            <input
+              ref={searchRef}
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search tools or formats — try jpg, pdf, mp3…"
+              aria-label="Search tools"
+              className="h-14 w-full rounded-2xl border border-line bg-surface pl-12 pr-16 text-base shadow-md outline-none transition placeholder:text-subtle focus:border-brand"
+            />
+            {query ? (
+              <button onClick={() => setQuery("")} aria-label="Clear search" className="absolute right-3 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-lg text-muted hover:bg-surface-2">
+                <X className="h-4 w-4" />
+              </button>
+            ) : (
+              <span className="pointer-events-none absolute right-4 top-1/2 hidden -translate-y-1/2 sm:block"><Kbd>/</Kbd></span>
+            )}
+          </div>
         </div>
-      )}
-    </section>
+      </section>
+
+      <section id="tools" className="mx-auto w-full max-w-6xl scroll-mt-24 px-4 pb-16 sm:px-6">
+        <div className="sticky top-16 z-30 -mx-4 border-b border-line/60 bg-paper/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6">
+          <div className="overflow-x-auto pb-1">
+            <Tabs tabs={filters} value={filter} onChange={setFilter} label="Tool categories" className="w-max min-w-full border-0 bg-transparent p-0" />
+          </div>
+        </div>
+
+        {!query && (recent.length > 0 || favorites.length > 0) && (
+          <div className="mt-6 space-y-5">
+            <Row title="Recently used" ids={recent} byId={byId} />
+            <Row title="Favorites" ids={favorites} byId={byId} />
+          </div>
+        )}
+
+        <div className="mt-6 flex items-center justify-between gap-3">
+          <p className="text-sm text-muted" aria-live="polite">
+            {visible.length} {visible.length === 1 ? "tool" : "tools"}
+            {query ? ` matching “${query}”` : ""}
+          </p>
+          <span className="hidden text-xs text-subtle sm:block">{categoryMeta[filter === "all" || filter === "voice" ? "pdf" : filter].label} · on your device</span>
+        </div>
+
+        {visible.length ? (
+          <ul className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+            {visible.map((tool) => (
+              <ToolCard key={tool.id} tool={tool} favorite={favorites.includes(tool.id)} onFavorite={() => toggleFavorite(tool.id)} />
+            ))}
+          </ul>
+        ) : (
+          <div className="mt-6">
+            <EmptyState
+              title="No tool matches that search."
+              hint="Try “pdf”, “image”, “excel”, or another category above."
+            />
+            <Button variant="secondary" className="mx-auto mt-4" onClick={() => { setQuery(""); setFilter("all"); }}>
+              Show all tools
+            </Button>
+          </div>
+        )}
+
+        <div className="mt-12 flex flex-col items-start gap-3 rounded-2xl border border-line bg-surface p-5 sm:flex-row sm:items-center">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-success/10 text-success"><LockKeyhole className="h-5 w-5" aria-hidden="true" /></span>
+          <div className="flex-1">
+            <p className="font-semibold">Private by design</p>
+            <p className="text-sm text-muted">Your files are converted inside this browser tab. They are never uploaded, stored on a server, or sent anywhere — even the first-time model downloads go straight into your browser cache.</p>
+          </div>
+          <ArrowRight className="hidden h-5 w-5 text-subtle sm:block" aria-hidden="true" />
+        </div>
+      </section>
+    </main>
   );
 }
 
-function ToolCard({ tool }: { tool: Tool }) {
+function Row({ title, ids, byId }: {
+  title: string;
+  ids: string[];
+  byId: (id: string) => Tool | undefined;
+}) {
+  const tools = ids.map(byId).filter((tool): tool is Tool => Boolean(tool));
+  if (!tools.length) return null;
   return (
-    <li>
+    <div>
+      <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-subtle">{title}</h2>
+      <div className="flex gap-2 overflow-x-auto pb-1">
+        {tools.slice(0, 8).map((tool) => (
+          <Link key={tool.id} href={`/convert/${tool.id}`} className="flex min-h-11 shrink-0 items-center gap-2 rounded-xl border border-line bg-surface px-3 text-sm font-medium shadow-sm transition hover:border-brand/50">
+            <ToolIcon name={tool.icon} className="h-4 w-4 text-brand" />
+            {tool.label}
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ToolCard({ tool, favorite, onFavorite }: { tool: Tool; favorite: boolean; onFavorite: () => void }) {
+  return (
+    <li className="relative">
       <Link
         href={`/convert/${tool.id}`}
-        className="group flex h-full flex-col gap-3 rounded-2xl border border-black/5 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-brand/30 hover:shadow-md dark:border-white/10 dark:bg-white/[0.04] dark:hover:border-brand/40"
+        className="group flex h-full flex-col gap-3 rounded-2xl border border-line bg-surface p-4 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-brand/50 hover:shadow-md active:translate-y-0"
       >
         <span className={cn("flex h-11 w-11 items-center justify-center rounded-xl", tileColor[tool.color])}>
-          <ToolIcon name={tool.icon} />
+          <ToolIcon name={tool.icon} className="h-5 w-5" />
         </span>
         <span className="flex-1">
-          <span className="flex items-center gap-2 text-[15px] font-semibold leading-snug">
-            {tool.label}
-          </span>
-          <span className="mt-0.5 block text-xs text-black/50 dark:text-white/50">{tool.hint}</span>
+          <span className="block text-[15px] font-semibold leading-snug">{tool.label}</span>
+          <span className="mt-0.5 block text-xs text-muted">{tool.hint}</span>
         </span>
-        <span className="text-[11px] font-medium text-black/60 dark:text-white/60">{categoryMeta[tool.category].label}</span>
+        <span className="flex flex-wrap gap-1.5">
+          <Badge>{tool.from}</Badge>
+          <span className="text-[11px] text-subtle">→</span>
+          <Badge>{tool.to}</Badge>
+        </span>
       </Link>
+      <button
+        type="button"
+        onClick={onFavorite}
+        aria-label={favorite ? `Remove ${tool.label} from favorites` : `Add ${tool.label} to favorites`}
+        aria-pressed={favorite}
+        className="absolute right-2 top-2 flex h-11 w-11 items-center justify-center rounded-lg text-subtle transition hover:bg-surface-2 hover:text-brand"
+      >
+        <Star className={cn("h-4 w-4", favorite && "fill-brand text-brand")} aria-hidden="true" />
+      </button>
     </li>
   );
+}
+
+function Badge({ children }: { children: string }) {
+  return <span className="rounded-md bg-surface-2 px-1.5 py-0.5 font-mono text-[11px] uppercase text-muted">{children}</span>;
 }

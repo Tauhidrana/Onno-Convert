@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Logo } from "@/components/brand";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { CommandPalette } from "@/components/command-palette";
 
 export function SiteHeader() {
   return (
@@ -9,13 +10,14 @@ export function SiteHeader() {
         <Link href="/" className="flex items-center" aria-label="Onno Convert by OnnoPoth">
           <Logo />
         </Link>
-        <nav className="flex items-center gap-1">
+        <nav className="flex items-center gap-1.5">
           <Link
             href="/#tools"
             className="rounded-lg px-3 py-2 text-sm text-black/60 transition hover:bg-black/5 hover:text-black dark:text-white/60 dark:hover:bg-white/10 dark:hover:text-white"
           >
             All tools
           </Link>
+          <CommandPalette />
           <ThemeToggle />
         </nav>
       </div>
