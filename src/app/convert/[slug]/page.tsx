@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { categoryMeta, toolById, tools } from "@/convert/registry";
 import { ToolClient } from "@/components/tool-client";
+import { WorkspaceClient } from "@/components/workspace-client";
 import { ToolIcon } from "@/components/tool-icon";
 import { tileColor } from "@/components/colors";
 
@@ -27,7 +28,7 @@ export default async function ToolPage({ params }: { params: Promise<{ slug: str
   if (!tool) notFound();
 
   return (
-    <main className="mx-auto w-full max-w-4xl px-4 py-8 sm:px-6 sm:py-12">
+    <main className={tool.kind === "workspace" ? "mx-auto w-full max-w-[1600px] px-4 py-6 sm:px-6" : "mx-auto w-full max-w-4xl px-4 py-8 sm:px-6 sm:py-12"}>
       <Link
         href="/"
         className="inline-flex items-center gap-1.5 rounded-lg py-1 text-sm text-black/55 transition hover:text-black dark:text-white/55 dark:hover:text-white"
@@ -60,7 +61,7 @@ export default async function ToolPage({ params }: { params: Promise<{ slug: str
             </p>
           </div>
         ) : (
-          <ToolClient toolId={tool.id} />
+          tool.kind === "workspace" ? <WorkspaceClient toolId={tool.id} /> : <ToolClient toolId={tool.id} />
         )}
       </div>
 

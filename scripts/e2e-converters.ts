@@ -16,6 +16,7 @@ const port = Number(process.env.E2E_PORT || 3187);
 const externalUrl = process.env.E2E_BASE_URL;
 const baseUrl = externalUrl || `http://127.0.0.1:${port}`;
 const exifMarker = Buffer.from("Exif\0\0", "binary");
+const filter = process.env.E2E_FILTER ?? "";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -693,6 +694,7 @@ async function testCorruptInput(browser: Browser) {
 }
 
 async function testBengaliSpeech(page: Page) {
+  if (filter) return "skipped by filter";
   const tool = tools.find((item) => item.id === "speech-to-text");
   assert(tool, "Missing speech-to-text tool.");
   await page.goto(`${baseUrl}/convert/${tool.id}`);
@@ -738,6 +740,7 @@ async function testBengaliSpeech(page: Page) {
 }
 
 async function testSpeechSrt(page: Page) {
+  if (filter) return;
   const tool = tools.find((item) => item.id === "speech-to-text");
   assert(tool, "Missing speech-to-text tool.");
   await page.goto(`${baseUrl}/convert/${tool.id}`);
@@ -755,6 +758,7 @@ async function testSpeechSrt(page: Page) {
 }
 
 async function testVoiceRecorder(browser: Browser) {
+  if (filter) return;
   const tool = tools.find((item) => item.id === "voice-recorder");
   assert(tool, "Missing voice-recorder tool.");
   const context = await browser.newContext({ permissions: ["microphone"] });
@@ -839,6 +843,188 @@ async function testMobileLayouts(browser: Browser) {
   }
 }
 
+async function pdfText(bytes: Uint8Array, pageNumber = 1) {
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  pdfjs.GlobalWorkerOptions.workerSrc = new URL("../node_modules/pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).href;
+  const doc = await pdfjs.getDocument({ data: bytes.slice() }).promise;
+  const page = await doc.getPage(pageNumber);
+  const content = await page.getTextContent();
+  return content.items.map((item) => ("str" in item ? item.str : "")).join("");
+}
+
+async function waitExport(page: Page) {
+  await page.waitForTimeout(250);
+  await page.waitForFunction(() => {
+    const button = [...document.querySelectorAll("button")].find((item) => item.textContent?.includes("Export PDF"));
+    return Boolean(button && (button as HTMLButtonElement).disabled);
+  }, null, { timeout: 15_000 }).catch(() => {});
+  await page.waitForFunction(() => {
+    const button = [...document.querySelectorAll("button")].find((item) => item.textContent?.includes("Export PDF"));
+    return Boolean(button && !(button as HTMLButtonElement).disabled && document.body.innerText.includes("is ready"));
+  }, null, { timeout: 120_000 });
+}
+
+async function workspaceDownload(page: Page) {
+  const event = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download", exact: true }).click();
+  const download = await event;
+  const stream = await download.createReadStream();
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) chunks.push(Buffer.from(chunk));
+  return new Uint8Array(Buffer.concat(chunks));
+}
+
+async function uploadPdf(page: Page, spec: string) {
+  const [slug, name = slug] = spec.split(":");
+  await page.goto(`${baseUrl}/convert/${slug}`);
+  await page.waitForTimeout(400);
+  await page.locator('input[data-workspace-input]').setInputFiles(join(outputDir, `${name}.pdf`));
+  await page.getByRole("button", { name: "Choose a PDF" }).waitFor({ state: "detached" });
+}
+
+async function stageClick(page: Page, x = 0.25, y = 0.25) {
+  const box = await page.locator("[data-canvas]").boundingBox();
+  assert(box, "The PDF canvas was not rendered.");
+  await page.mouse.click(box.x + box.width * x, box.y + box.height * y);
+}
+
+async function testEditPdf(browser: Browser) {
+  const page = await browser.newPage();
+  try {
+    await uploadPdf(page, "edit-pdf");
+    await page.getByRole("button", { name: "Text", exact: true }).click();
+    await stageClick(page);
+    const textarea = page.locator("textarea").first();
+    await textarea.fill("বাংলা Onno");
+    await page.getByLabel("Font").selectOption("bengali");
+    await page.getByRole("button", { name: "Export PDF" }).click();
+    await waitExport(page);
+    const bytes = await workspaceDownload(page);
+    assert(Buffer.from(bytes).toString("ascii", 0, 5) === "%PDF-", "Edit PDF exported an invalid PDF.");
+    const pdf = await PDFDocument.load(bytes);
+    assert(pdf.getPageCount() === 3, `Edit PDF changed page count to ${pdf.getPageCount()}.`);
+    const text = await pdfText(bytes);
+    assert(text.includes("বাংলা"), `Bengali text missing from exported PDF: ${text}`);
+    assert(text.includes("Extractable text layer"), "Original PDF text was lost.");
+
+  } finally {
+    await page.close();
+  }
+
+  const redactPage = await browser.newPage();
+  try {
+    await uploadPdf(redactPage, "edit-pdf");
+    await redactPage.getByRole("button", { name: "Redact", exact: true }).click();
+    await stageClick(redactPage, 0.12, 0.285);
+    await redactPage.getByLabel("Rasterize redacted pages").check();
+    await redactPage.getByRole("button", { name: "Export PDF" }).click();
+    await waitExport(redactPage);
+    const redacted = await workspaceDownload(redactPage);
+    const redactedText = await pdfText(redacted);
+    assert(!redactedText.includes("Extractable text layer"), "Rasterize redaction did not remove the covered text.");
+    return "Bangla text + real redaction";
+  } finally {
+    await redactPage.close();
+  }
+}
+
+async function testSignPdf(browser: Browser) {
+  const page = await browser.newPage();
+  try {
+    await uploadPdf(page, "sign-pdf");
+    await page.getByRole("button", { name: "Create signature" }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Type" }).click();
+    await page.getByLabel("Signature text").fill("Onno Signer");
+    await page.getByRole("button", { name: "Use this signature" }).click();
+    await stageClick(page);
+    await page.getByRole("button", { name: "Export PDF" }).click();
+    await waitExport(page);
+    const bytes = await workspaceDownload(page);
+    const pdf = await PDFDocument.load(bytes);
+    assert(pdf.getPageCount() === 3, "Sign PDF changed the page count.");
+    const { PDFName } = await import("pdf-lib");
+    const resources = (pdf.getPage(0).node as unknown as { Resources(): { get(key: unknown): unknown } }).Resources();
+    const xobjects = pdf.context.lookup(resources.get(PDFName.of("XObject")) as never) as Map<string, unknown> | undefined;
+    const count = xobjects && "keys" in xobjects ? (xobjects as unknown as { keys(): unknown[] }).keys().length : 0;
+    assert(count > 0, "No signature image (XObject) was embedded in the PDF.");
+    return `signature image embedded (${count} XObject(s))`;
+  } finally {
+    await page.close();
+  }
+}
+
+async function testFormTools(browser: Browser) {
+  const page = await browser.newPage();
+  try {
+    await uploadPdf(page, "build-form");
+    await page.getByRole("button", { name: "Text", exact: true }).click();
+    await stageClick(page);
+    await page.getByRole("button", { name: "Export PDF" }).click();
+    await waitExport(page);
+    const formBytes = await workspaceDownload(page);
+    await writeFile(join(outputDir, "built-form.pdf"), formBytes);
+    const formPdf = await PDFDocument.load(formBytes);
+    const names = formPdf.getForm().getFields().map((field) => field.getName());
+    assert(names.length >= 1, "Form Builder created no AcroForm fields.");
+
+    await uploadPdf(page, "fill-form:built-form");
+    const input = page.locator("aside input:not([type=checkbox])").first();
+    await input.fill("Filled by Onno");
+    await page.getByLabel("Flatten fields into static text").check();
+    await page.getByRole("button", { name: "Export PDF" }).click();
+    await waitExport(page);
+    const filled = await workspaceDownload(page);
+    const text = await pdfText(filled);
+    assert(text.includes("Filled by Onno"), "The filled value did not appear in the exported PDF.");
+    const flatPdf = await PDFDocument.load(filled);
+    assert(flatPdf.getForm().getFields().length === 0, "Flatten left interactive fields behind.");
+    return `${names.length} field(s) created and filled`;
+  } finally {
+    await page.close();
+  }
+}
+
+async function testRequestAndShare(browser: Browser) {
+  const page = await browser.newPage();
+  try {
+    await uploadPdf(page, "request-signatures");
+    await page.getByLabel("Signer 1 name").fill("A. Signer");
+    await page.getByRole("button", { name: "Signature", exact: true }).click();
+    await stageClick(page);
+    await page.getByRole("button", { name: "Export PDF" }).click();
+    await waitExport(page);
+    const bytes = await workspaceDownload(page);
+    const pdf = await PDFDocument.load(bytes);
+    const names = pdf.getForm().getFields().map((field) => field.getName());
+    assert(names.some((name) => name.includes("signature")), `Signature placeholder missing from ${names.join(",")}`);
+
+    await uploadPdf(page, "share-pdf");
+    await page.getByRole("button", { name: "Download", exact: true }).waitFor();
+    await page.getByRole("button", { name: "Open in email" }).waitFor();
+    await page.getByRole("button", { name: "Copy filename" }).click();
+    return `${names.length} placeholder field(s); share options present`;
+  } finally {
+    await page.close();
+  }
+}
+
+async function testWorkspaceMobile(browser: Browser) {
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true });
+  try {
+    for (const slug of ["edit-pdf", "sign-pdf", "build-form", "fill-form", "request-signatures", "share-pdf", "voice-cleaner"]) {
+      await page.goto(`${baseUrl}/convert/${slug}`);
+      await page.getByRole("heading", { level: 1 }).waitFor();
+      const { viewportWidth, documentWidth } = await page.evaluate(() => ({
+        viewportWidth: document.documentElement.clientWidth,
+        documentWidth: document.documentElement.scrollWidth,
+      }));
+      assert(documentWidth <= viewportWidth, `${slug} overflows horizontally at 390px (${documentWidth}px).`);
+    }
+  } finally {
+    await page.close();
+  }
+}
+
 async function main() {
   await writeStaticFixtures();
   let server: ReturnType<typeof spawn> | undefined;
@@ -870,7 +1056,8 @@ async function main() {
     const failures: string[] = [];
     let extraPasses = 0;
     for (const tool of tools) {
-      if (tool.id === "voice-recorder") continue;
+      if (tool.id === "voice-recorder" || tool.id === "voice-cleaner" || tool.kind === "workspace") continue;
+      if (filter && !tool.id.includes(filter)) continue;
       try {
         const result = await testTool(page, tool);
         console.log(`PASS ${tool.id}: ${result}`);
@@ -917,7 +1104,13 @@ async function main() {
       ["corrupt input", () => testCorruptInput(browser)],
       [">200 MiB file warning", () => testLargeFileWarning(browser)],
       ["390px mobile layouts", () => testMobileLayouts(browser)],
+      ["edit PDF (Bangla text + redaction)", () => testEditPdf(browser)],
+      ["sign PDF (embedded image)", () => testSignPdf(browser)],
+      ["form builder + fill form", () => testFormTools(browser)],
+      ["request signatures + share", () => testRequestAndShare(browser)],
+      ["390px workspace layouts", () => testWorkspaceMobile(browser)],
     ] as const) {
+      if (filter && !name.includes(filter)) continue;
       try {
         await check();
         extraPasses++;

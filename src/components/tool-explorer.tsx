@@ -15,6 +15,7 @@ type Filter = "all" | "voice" | Category;
 const filters: { id: Filter; label: string }[] = [
   { id: "all", label: "All tools" },
   { id: "pdf", label: "PDF" },
+  { id: "workspace", label: "PDF Workspace" },
   { id: "image", label: "Image" },
   { id: "audio", label: "Audio" },
   { id: "video", label: "Video" },
@@ -92,7 +93,7 @@ export function ToolExplorer() {
   }, []);
 
   const visible = useMemo(
-    () => availableTools.filter((tool) => (filter === "all" || (filter === "voice" ? ["voice-recorder", "speech-to-text"].includes(tool.id) : tool.category === filter)) && matches(tool, query)),
+    () => availableTools.filter((tool) => (filter === "all" || (filter === "voice" ? ["voice-recorder", "speech-to-text", "voice-cleaner"].includes(tool.id) : tool.category === filter)) && matches(tool, query)),
     [filter, query],
   );
   const byId = (id: string) => availableTools.find((tool) => tool.id === id);

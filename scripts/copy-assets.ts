@@ -2,7 +2,7 @@
 import { cpSync, mkdirSync, rmSync } from "node:fs";
 
 // These ignored directories contain only copied and build-generated assets.
-for (const path of ["public/ffmpeg", "public/pdf", "public/worker", "public/tesseract"]) {
+for (const path of ["public/ffmpeg", "public/pdf", "public/worker", "public/tesseract", "public/rnnoise"]) {
   rmSync(path, { recursive: true, force: true });
   mkdirSync(path, { recursive: true });
 }
@@ -40,6 +40,8 @@ for (const file of [
 ]) {
   cpSync(`node_modules/tesseract.js-core/${file}`, `public/tesseract/core/${file}`);
 }
+mkdirSync("public/rnnoise", { recursive: true });
+cpSync("node_modules/@shiguredo/rnnoise-wasm/dist/rnnoise.js", "public/rnnoise/rnnoise.js");
 console.log("static assets copied");
 
 // The conversion worker is bundled by bun, not Turbopack (see runner.ts).

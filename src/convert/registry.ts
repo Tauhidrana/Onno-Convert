@@ -31,10 +31,18 @@ export type IconName =
   | "server"
   | "presentation"
   | "mic"
-  | "scissors";
+  | "scissors"
+  | "pen"
+  | "signature"
+  | "form"
+  | "share"
+  | "users"
+  | "audio-lines";
 
 export interface Tool {
   id: string;
+  /** convert = upload → options → convert → download; workspace = interactive editor. */
+  kind?: "convert" | "workspace";
   from: string;
   to: string;
   /** Target extension or internal action, passed to the converter as opts.__action. */
@@ -696,6 +704,68 @@ export const tools: Tool[] = [
     worker: true,
   },
 
+  // Phase 6 — PDF workspace + voice cleaner
+  {
+    id: "edit-pdf", kind: "workspace", from: "pdf", to: "pdf", action: "edit", category: "workspace",
+    label: "Edit PDF", hint: "Text, shapes, images and redaction", icon: "pen", color: "rose",
+    accept: ".pdf,application/pdf",
+    note: "Overlay editor: existing PDF text cannot be edited in place. Whiteout covers text visually; use rasterize mode for real removal.",
+  },
+  {
+    id: "sign-pdf", kind: "workspace", from: "pdf", to: "pdf", action: "sign", category: "workspace",
+    label: "Sign PDF", hint: "Draw, type or upload a signature", icon: "signature", color: "violet",
+    accept: ".pdf,application/pdf",
+    note: "Visual signature only. Not a certificate-based digital signature, and no legal claim is made.",
+  },
+  {
+    id: "build-form", kind: "workspace", from: "pdf", to: "pdf", action: "form", category: "workspace",
+    label: "Form Builder", hint: "Create fillable AcroForm fields", icon: "form", color: "emerald",
+    accept: ".pdf,application/pdf",
+    note: "Creates real AcroForm fields that fill in Adobe, Chrome and Firefox. No submit button or server is involved.",
+  },
+  {
+    id: "fill-form", kind: "workspace", from: "pdf", to: "pdf", action: "fill", category: "workspace",
+    label: "Fill Form", hint: "Fill existing fields, optionally flatten", icon: "file-text", color: "emerald",
+    accept: ".pdf,application/pdf",
+    note: "Lists fields in your PDF, fills them locally and can flatten the result into static text.",
+  },
+  {
+    id: "request-signatures", kind: "workspace", from: "pdf", to: "pdf", action: "request", category: "workspace",
+    label: "Request Signatures", hint: "Place fields for up to five signers", icon: "users", color: "amber",
+    accept: ".pdf,application/pdf",
+    note: "Local-only: this app cannot send, track or verify signatures. Export the PDF and share it yourself.",
+  },
+  {
+    id: "share-pdf", kind: "workspace", from: "pdf", to: "pdf", action: "share", category: "workspace",
+    label: "Share PDF", hint: "Web Share, email or copy filename", icon: "share", color: "cyan",
+    accept: ".pdf,application/pdf",
+    note: "Nothing is uploaded: no hosted links, accounts or tracking. Web Share depends on your device and browser.",
+  },
+  {
+    id: "voice-cleaner", from: "audio", to: "wav", action: "clean", category: "audio",
+    label: "Voice Noise Cleaner", hint: "Fast filters or RNNoise AI", icon: "audio-lines", color: "violet",
+    accept: ".mp3,.wav,.m4a,.ogg,.flac,.mp4,.webm,audio/*,video/*",
+    options: [
+      {
+        key: "engine", label: "Engine", type: "select", default: "fast",
+        options: [{ value: "fast", label: "Fast (ffmpeg filters)" }, { value: "ai", label: "AI (RNNoise WASM)" }],
+        help: "Fast works everywhere. AI downloads about 5 MB once and runs on device.",
+      },
+      {
+        key: "preset", label: "Preset", type: "select", default: "speech",
+        options: [{ value: "speech", label: "Speech" }, { value: "heavy", label: "Heavy noise" }, { value: "light", label: "Light hiss" }],
+        help: "Starting point; fine-tune with strength below.",
+      },
+      { key: "strength", label: "Denoise strength", type: "range", default: 0.5, min: 0, max: 1, step: 0.05, help: "Higher removes more noise but can soften speech." },
+      { key: "loudnorm", label: "Normalize volume", type: "checkbox", default: false },
+      {
+        key: "output", label: "Output", type: "select", default: "wav",
+        options: [{ value: "wav", label: "WAV (lossless)" }, { value: "mp3", label: "MP3 (smaller)" }],
+      },
+    ],
+    note: "Audio is decoded and cleaned in your browser. A/B playback, waveform and measured noise-floor change are shown after processing.",
+  },
+
   // Phase 3 (server, not built)
   { id: "pdf-to-docx", from: "pdf", to: "docx", action: "server", category: "document", label: "PDF to Word", hint: "Server · Phase 3", icon: "server", color: "slate", accept: ".pdf,application/pdf", status: "planned" },
   { id: "pdf-to-xlsx", from: "pdf", to: "xlsx", action: "server", category: "document", label: "PDF to Excel", hint: "Server · Phase 3", icon: "server", color: "slate", accept: ".pdf,application/pdf", status: "planned" },
@@ -714,6 +784,7 @@ const mediaModule = () => import("./media");
 const speechModule = () => import("./speech");
 const ocrModule = () => import("./ocr");
 const ebookModule = () => import("./ebook");
+const voiceCleanModule = () => import("./voice-clean");
 
 for (const tool of tools) {
   if (tool.status === "planned") continue;
@@ -722,6 +793,7 @@ for (const tool of tools) {
   else if (tool.category === "pdf") tool.load = pdfModule;
   else if (tool.category === "data") tool.load = dataModule;
   else if (tool.id === "speech-to-text") tool.load = speechModule;
+  else if (tool.id === "voice-cleaner") tool.load = voiceCleanModule;
   else if (tool.category === "audio" || tool.category === "video") tool.load = mediaModule;
   else if (tool.category === "ebook") tool.load = ebookModule;
 }
@@ -737,4 +809,5 @@ export const categoryMeta: Record<Category, { label: string; color: ColorName }>
   audio: { label: "Audio", color: "violet" },
   video: { label: "Video", color: "orange" },
   ebook: { label: "Ebook", color: "cyan" },
+  workspace: { label: "PDF Workspace", color: "rose" },
 };

@@ -148,6 +148,16 @@ Phase 2 implementation is present; Bengali speech-to-text remains unreliable. Ph
 - [x] After screenshots (`design-audit/after/`), one refinement round, Lighthouse mobile + desktop 100/100/100/100
 - [x] Push + Vercel redeploy: `f89e6b8` → production deployment Ready and aliased to `https://onno-convert.vercel.app` (live home + tool routes return 200)
 
+## Phase 6 — PDF workspace + voice cleaner
+- [x] Registry `kind`, PDF Workspace category, six workspace tools and full-width editor shell
+- [x] Shared foundation: lazy pdf.js page renderer, overlay model with undo/redo + keyboard nudge, coordinate mapping (rotation/CropBox), pdf-lib exporter with Bengali fontkit text, page ops and rasterize redaction
+- [x] Edit PDF (Bangla text verified in exported PDF, shapes, draw, image, whiteout, real redaction, page ops)
+- [x] Sign PDF (draw/type/upload signatures, localStorage saves, date/name stamps, visual-signature disclaimer)
+- [x] Form Builder + Fill Form (AcroForm fields read back with pdf-lib, flatten)
+- [x] Request Signatures (1–5 colour-coded signers, placeholder fields, no-server disclaimer) + Share PDF (Web Share detection, mailto, copy filename)
+- [ ] Voice Noise Cleaner (fast + RNNoise WASM), objective noise-floor test
+- [ ] README update, Lighthouse, push + redeploy, final report
+
 ## Next step
 Review the final diff and commit the Phase 4 Whisper/practical-check milestone. Do not build Phase 3 server tools.
 

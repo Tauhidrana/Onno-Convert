@@ -12,3 +12,4 @@ public/worker
 public/ffmpeg
 public/pdf
 public/tesseract
+public/rnnoise

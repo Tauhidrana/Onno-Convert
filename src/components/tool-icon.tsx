@@ -1,5 +1,6 @@
 import {
   ArrowUpDown,
+  AudioLines,
   BookOpen,
   FileCode2,
   FileImage,
@@ -8,7 +9,10 @@ import {
   FileType2,
   Images,
   Image as ImageIcon,
+  ListChecks,
   Merge,
+  PenLine,
+  PenTool,
   Mic,
   Music,
   Presentation,
@@ -16,6 +20,8 @@ import {
   RotateCw,
   Scissors,
   Server,
+  Share2,
+  Users,
   Shrink,
   Split,
   Table2,
@@ -45,6 +51,12 @@ const map = {
   presentation: Presentation,
   mic: Mic,
   scissors: Scissors,
+  pen: PenLine,
+  signature: PenTool,
+  form: ListChecks,
+  share: Share2,
+  users: Users,
+  "audio-lines": AudioLines,
 } satisfies Record<IconName, typeof ImageIcon>;
 
 export function ToolIcon({ name, className = "h-5 w-5" }: { name: IconName; className?: string }) {

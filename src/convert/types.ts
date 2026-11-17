@@ -1,4 +1,4 @@
-export type Category = "pdf" | "image" | "document" | "data" | "audio" | "video" | "ebook";
+export type Category = "pdf" | "image" | "document" | "data" | "audio" | "video" | "ebook" | "workspace";
 
 export type ToolGroup = "from-pdf" | "to-pdf" | "other";
 
