@@ -157,7 +157,9 @@ Phase 2 implementation is present; Bengali speech-to-text remains unreliable. Ph
 - [x] Request Signatures (1–5 colour-coded signers, placeholder fields, no-server disclaimer) + Share PDF (Web Share detection, mailto, copy filename)
 - [x] Voice Noise Cleaner (fast ffmpeg filters + RNNoise WASM in a Worker), objective noise-floor test with real noisy fixture
 - [x] README update
-- [ ] Lighthouse, push + redeploy, final report
+- [x] Lighthouse 100/100/100/100 on mobile and desktop; home loads no workspace/AI libraries
+- [x] Push + Vercel redeploy Ready at `https://onno-convert.vercel.app`; live workspace/voice routes and assets return 200
+- [x] Final report with verified vs untested and honest limits
 
 ## Next step
 Review the final diff and commit the Phase 4 Whisper/practical-check milestone. Do not build Phase 3 server tools.
